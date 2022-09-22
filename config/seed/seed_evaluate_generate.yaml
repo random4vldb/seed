@@ -1,0 +1,4 @@
+input_file: data/tabpert/initial_dataset/all_data/table_categories.tsv
+tables_dir: data/tabpert/initial_dataset/all_data/tables
+category_file: data/tabpert/initial_dataset/all_data/key_categories.json
+output_file: data/tabpert/processed/test.jsonl

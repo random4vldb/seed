@@ -1,0 +1,215 @@
+import json
+from typing import List
+
+import numpy as np
+import torch
+from pyserini.search.faiss import FaissSearcher
+from pyserini.search.lucene import LuceneSearcher
+from transformers import (
+    DPRContextEncoder,
+    DPRContextEncoderTokenizerFast,
+    DPRQuestionEncoder,
+    DPRQuestionEncoderTokenizerFast,
+)
+import pandas as pd
+from loguru import logger
+
+
+class DPRSearcher:
+    def __init__(self, faiss_index, lucene_index, qry_encoder):
+        logger.info("Loading DPR model")
+        self.searcher = FaissSearcher(faiss_index, qry_encoder)
+        self.searcher.ssearcher = LuceneSearcher(lucene_index)
+
+    def process_content(self, content):
+        content = json.loads(content)
+        title, doc = content["title"], content["contents"]
+        return title, doc
+
+    def process_result(self, hits, include_docs=False, include_vectors=False):
+        result = []
+        scores = []
+        vectors = []
+        for hit in hits:
+            docid = hit.docid
+            score = hit.score
+            doc = self.searcher.doc(docid)
+            scores.append(score)
+            if include_docs:
+                title, doc = self.process_content(doc.raw())
+                result.append(
+                    {"title": title, "text": doc, "score": score, "id": docid}
+                )
+            else:
+                result.append({"score": score, "id": docid, "title": title})
+            if include_vectors:
+                result[-1]["vectors"] = hit.vectors
+                vectors.append(hit.vectors)
+        if include_vectors:
+            return result, scores, vectors
+        return result, scores
+
+    def query(self, query, k, include_docs=True, include_vectors=False):
+        hits = self.searcher.search(query, k, return_vector=include_vectors)
+
+        if include_vectors:
+            _, hits = hits
+
+        return self.process_result(hits, include_docs, include_vectors)
+
+    def batch_query(
+        self, queries, k=10, num_threads=1, include_docs=True, include_vectors=False
+    ):
+        result = self.searcher.batch_search(
+            queries,
+            [str(x) for x in list(range(len(queries)))],
+            threads=num_threads,
+            k=k,
+            return_vector=include_vectors,
+        )
+
+        if include_vectors:
+            _, result = result
+
+        outputs = [[] for _ in range(len(queries))]
+        scores = [[] for _ in range(len(queries))]
+        vectors = [[] for _ in range(len(queries))]
+        for qid, hits in result.items():
+
+            if include_vectors:
+                (
+                    outputs[int(qid)],
+                    scores[int(qid)],
+                    vectors[int(qid)],
+                ) = self.process_result(hits, include_docs, include_vectors)
+            else:
+                outputs[int(qid)], scores[int(qid)] = self.process_result(
+                    hits, include_docs, include_vectors
+                )
+
+        if include_vectors:
+            return outputs, scores, vectors
+        return outputs, scores
+
+    def __call__(self, examples, k=10):
+        outputs, _ = self.batch_query([x["linearized_table"] for x in examples], k, include_docs=True)
+
+        return outputs
+
+
+class HybridSearcher:
+    def __init__(self, lucene_index, qry_encoder_path, ctx_encoder_path):
+        self.searcher = LuceneSearcher(lucene_index)
+        self.qry_tokenizer, self.qry_encoder, self.ctx_tokenizer, self.ctx_encoder = self._get_tokenizer_and_model(qry_encoder_path, ctx_encoder_path)
+
+    def _get_tokenizer_and_model(cfg, qry_encoder_path, ctx_encoder_path):
+        qry_encoder = DPRQuestionEncoder.from_pretrained(qry_encoder_path)
+        qry_encoder.eval()
+        ctx_encoder = DPRContextEncoder.from_pretrained(ctx_encoder_path)
+        ctx_encoder.eval()
+        qry_tokenizer = DPRQuestionEncoderTokenizerFast.from_pretrained(
+            "facebook/dpr-question_encoder-multiset-base"
+        )
+        ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained(
+            "facebook/dpr-ctx_encoder-multiset-base"
+        )
+        return qry_tokenizer, qry_encoder, ctx_tokenizer, ctx_encoder
+
+    def ctx_embed(
+        self,
+        doc_batch: List[dict]
+    ) -> np.ndarray:
+        documents = {
+            "title": [doci["title"] for doci in doc_batch],
+            "text": [doci["contents"] for doci in doc_batch],
+        }
+        """Compute the DPR embeddings of document passages"""
+        input_ids = self.ctx_tokenizer(
+            documents["title"],
+            documents["text"],
+            truncation=True,
+            padding="longest",
+            return_tensors="pt",
+        )["input_ids"]
+
+        with torch.no_grad():
+            embeddings = self.ctx_encoder(
+                input_ids.to(device=self.ctx_encoder.device), return_dict=True
+            ).pooler_output
+        return embeddings.detach().cpu().to(dtype=torch.float16).numpy()
+
+    def qry_embed(
+        self,
+        qry_batch: List[str]
+    ) -> np.ndarray:
+        inputs = self.qry_tokenizer(
+            qry_batch, truncation=True, padding="longest", return_tensors="pt"
+        )  
+        with torch.no_grad():
+            embeddings = self.qry_encoder(
+                inputs["input_ids"].to(device=self.qry_encoder.device),
+                inputs["attention_mask"].to(device=self.qry_encoder.device),
+                return_dict=True,
+            ).pooler_output
+        return embeddings.detach().cpu().to(dtype=torch.float16).numpy()
+
+    def process_result(self, query, hits, include_docs=False):
+        hits = [json.loads(hit.raw) for hit in hits]
+        ctx_vecs = [self.ctx_embed([hit]).reshape(-1) for hit in hits]
+        qry_vec = self.qry_embed([query]).reshape(-1)
+
+        scores = [(np.dot(qry_vec, ctx_veci)) for p, ctx_veci in zip(hits, ctx_vecs)]
+
+        if include_docs:
+            result = [{"title": hit["title"], "text": hit["contents"], "score": score, "id": hit["id"]} for hit, score in zip(hits, scores)]
+        else:
+            result = [{"title": hit["title"], "score": score, "id": hit["id"]} for hit, score in zip(hits, scores)]
+
+        return result, scores
+
+    def query(self, query, k, include_docs=True, include_vectors=False):
+        hits = self.searcher.search(query, k * 2)
+
+        result, scores = self.process_result(hits)
+
+        result = sorted(result, key=lambda x: x["score"], reverse=True)[:k]
+        scores = sorted(scores, reverse=True)[:k]
+
+        return result, scores
+
+    def batch_query(
+        self, queries, k=10, num_threads=1, include_docs=True, include_vectors=False
+    ):
+        result = self.searcher.batch_search(
+            queries,
+            [str(x) for x in list(range(len(queries)))],
+            threads=num_threads,
+            k=k,
+        )
+
+
+        outputs = [[] for _ in range(len(queries))]
+        scores = [[] for _ in range(len(queries))]
+        for qid, hits in result.items():
+            output, score = self.process_result(
+                queries[int(qid)], hits, include_docs
+            )
+
+
+            outputs[int(qid)] = sorted(output, key=lambda x: x["score"], reverse=True)[:k]
+            scores[int(qid)] = sorted(score, reverse=True)[:k]
+
+        return outputs, scores
+
+    
+    def __call__(self, examples, k=10):
+        queries = []
+        for example in examples:
+            table = pd.DataFrame(example["table"])
+            query = " ".join([table.iloc[i, j] for i, j in example["highlighted_cells"]])
+            query = example["table_page_title"] + " " + example["table_section_title"] + " " + query
+            queries.append(query)
+
+        outputs, _ = self.batch_query(queries, k, include_docs=True)
+
+        return outputs 

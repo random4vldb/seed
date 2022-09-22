@@ -1,0 +1,6 @@
+kilt_corpus: kilt_knowledgesource.json 
+output_dir: temp/kilt_passages 
+passage_ids: temp/passage_ids.txt
+num_output_files: 8
+max_passage_words: 100
+min_passage_words: 50

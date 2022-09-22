@@ -1,0 +1,16 @@
+train_file: temp/seed/nli_data/train.jsonl
+dev_file: temp/seed/nli_data/dev.jsonl
+test_file: temp/seed/nli_data/dev.jsonl
+rand_perm: 1
+single_sentence: 0
+max_len: 512
+tokenizer_type: roberta-large
+model_name: model_4_0.301
+output_dir: temp/totto/model
+model_type: roberta-large
+cache_dir: .cache/infotab/
+batch_size: 4
+epochs: 10
+num_labels: 2
+train_size: 20000
+cached: True

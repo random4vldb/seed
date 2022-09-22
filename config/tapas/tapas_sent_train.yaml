@@ -1,0 +1,10 @@
+train_file: temp/seed/sent_selection/totto_train.jsonl
+dev_file: temp/seed/sent_selection/totto_dev.jsonl
+output_dir: temp/tapas/sent_selection/models/
+lr: 5e-5
+epochs: 5
+train_batch_size: 16
+eval_batch_size: 16
+model_name_or_path: temp/tapas/sent_selection/models/
+train: False
+eval: True

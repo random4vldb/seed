@@ -1,0 +1,12 @@
+output: temp/eval/bm25_preds.jsonl
+index_path: temp/pyserini_index
+data: data/totto/linearized/positive_pids/dev.jsonl
+include_passages: True  # if set, we return the list of passages too
+instance_limit: -1
+num_processes: 10
+num_answers: 20
+batch_size: 20
+ks:
+  - 1
+  - 5
+  - 10

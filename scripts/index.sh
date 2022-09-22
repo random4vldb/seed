@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=$1 python -m pyserini.encode input --corpus temp/pyserini_passages --fields title text --delimiter "\n\n" --shard-id $1 --shard-num 4 output  --embeddings pyserini_dpr_$1 encoder --encoder temp/dpr_model/ctx_encoder_dpr --encoder-class dpr --fields title text --batch 32 --fp16

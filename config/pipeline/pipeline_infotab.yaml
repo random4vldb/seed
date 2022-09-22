@@ -1,0 +1,8 @@
+input_file: data/infotab/dev.jsonl
+batch_size: 16
+faiss_index: pyserini_faiss_full
+lucene_index: temp/pyserini_index
+dpr_model: temp/dpr_model/qry_encoder_dpr
+nli_tokenizer: facebook/bart-large
+sent_selection_model: temp/seed/sent_selection/model
+nli_model: models/22-09-04-02-43-32/facebook/bart-large-mnli_epoch=8-val_loss=0.02.ckpt

@@ -1,0 +1,15 @@
+temp
+outputs
+data
+.env
+.hydra
+.ipynb_checkpoints
+models
+pyserini_passage_index
+*.log
+kilt_knowledgesource.json
+wandb/
+**/__pycache__/**
+pyserini_*
+poetry.lock
+.cache

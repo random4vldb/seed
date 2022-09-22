@@ -1,0 +1,5 @@
+_target_: pytorch_lightning.Trainer
+accelerator: gpu
+devices: 0,1,2,3
+strategy: dp
+max_epochs: 10

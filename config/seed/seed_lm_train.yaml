@@ -1,0 +1,4 @@
+data_dirs: 
+  - data/totto
+  - data/infotab
+output_dir: temp/lm

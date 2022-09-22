@@ -1,0 +1,25 @@
+defaults:
+  - callbacks: defaults
+  - logger: wandb
+  - paths: defaults
+  - trainer: gpu
+train: True
+evaluate: True
+predict: True
+model:
+  _target_: read.seed.module.Seed2Module
+  model_name_or_path: facebook/bart-large-mnli
+  learning_rate: 2.0e-5
+  adam_epsilon: 1.0e-8
+  warmup_steps: 0
+  weight_decay: 0.0
+  margin: 0.5
+datamodule:
+  _target_: read.seed.datamodule.Seed3DataModule
+  tokenizer: ${model.model_name_or_path}
+  num_labels: 2
+  dataset_name_or_path: data/totto/triplets
+  test_dataset_name_or_path: data/totto/augmented/dev.jsonl
+  train_batch_size: 4
+  eval_batch_size: 4
+  max_seq_length: 256
