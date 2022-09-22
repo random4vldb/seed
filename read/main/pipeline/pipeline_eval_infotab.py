@@ -18,67 +18,55 @@ root = pyrootutils.setup_root(
     cwd=True,
 )
 
-from read.utils.exp import ResultAnalyzer
-from read.utils.table import infotab2totto
+from read.metrics.pipeline import PipelineEvaluator
 
 logger.add("logs/debug.log", rotation="1 week")
 
 @hydra.main(
     version_base="1.2",
     config_path=root / "config" / "pipeline",
-    config_name="pipeline_infotab.yaml",
+    config_name="pipeline_totto.yaml",
 )
 def main(cfg):
     with jsonlines.open(cfg.input_file) as reader:
-        linearized_tables = []
-        labels = []
         data = list(reader)
-        random.seed(42)
+        random.seed(21)
         random.shuffle(data)
         data = data
-        for raw_obj in data:
-            obj = infotab2totto(raw_obj)
-            raw_obj["subtable_metadata_str"] = obj
-            linearized_tables.append(obj)
-            labels.append(raw_obj["label"] == 2)
+        data = data[:100]
 
-    logger.info(f"Loaded {len(labels)} examples with {sum(labels)} positives")
-
-    f1 = torchmetrics.F1Score(num_classes=2)
-    precision = torchmetrics.Precision(num_classes=2)
-    recall = torchmetrics.Recall(num_classes=2)
-    acc = torchmetrics.Accuracy(num_classes=2)
+    logger.info(f"Loaded {len(data)} examples with {sum([x['label'] for x in data])} positives", )
 
     batch = []    
     predictions = []
     golds = []
     gold_batch = []
-    report = ResultAnalyzer(data)
-    pipeline = SEEDPipeline(cfg, report)
+    report = PipelineEvaluator()
+    pipeline = SEEDPipeline.init_with_config(cfg, report)
 
 
-    for i in range(len(linearized_tables)):
-        batch.append(linearized_tables[i])
-        gold_batch.append(labels[i])
+    for i in range(len(data)):
+        data[i]["linearized_table"] = data[i]["subtable_metadata_str"]
+        data[i]["title"] = data[i]["table_page_title"]
+
+        batch.append(data[i])
+        gold_batch.append(data[i]["label"])
 
         if len(batch) == cfg.batch_size:
             result = pipeline(batch)
             predictions.extend(result)
-            golds.extend(labels[i - cfg.batch_size + 1 : i + 1])
+            golds.extend(gold_batch)
             batch = []
+            gold_batch = []
 
-            logger.info(f"Processed {i} examples")
-            for metric in [f1, precision, recall, acc]:
-                logger.info(f"{metric.__class__.__name__}: {metric(torch.tensor(predictions), torch.tensor(golds))}")
 
     if len(batch) > 0:
         result = pipeline(batch)
         predictions.extend(result)
-        golds.extend(labels[-len(batch) :])
-    for metric in [f1, precision, recall, acc]:
-        logger.info(f"{metric.__class__.__name__}: {metric(torch.tensor(predictions), torch.tensor(golds))}")
+        golds.extend(gold_batch)
 
-    report.print("debug.txt")
+
+    report.print()
 
 if __name__ == "__main__":
     main()

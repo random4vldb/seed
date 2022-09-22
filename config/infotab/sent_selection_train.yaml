@@ -1,6 +1,6 @@
-train_file: temp/infotab/sent_selection/totto_train.jsonl
-dev_file: temp/infotab/sent_selection/totto_dev.jsonl
-test_file: temp/infotab/sent_selection/totto_dev.jsonl
+train_file: temp/infotab/sent_selection/data/train.jsonl
+dev_file: temp/infotab/sent_selection/data/dev.jsonl
+test_file: temp/infotab/sent_selection/data/dev.jsonl
 rand_perm: 1
 single_sentence: 0
 max_len: 512
@@ -12,5 +12,5 @@ cache_dir: .cache/infotab/
 batch_size: 4
 epochs: 10
 num_labels: 2
-train_size: 20000
+train_size: -1
 cached: True

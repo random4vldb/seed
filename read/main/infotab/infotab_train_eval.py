@@ -514,7 +514,7 @@ def read_infotab_file(file):
 @hydra.main(
     version_base="1.2",
     config_path=root / "config" / "infotab",
-    config_name="sent_selection.yaml",
+    config_name="sent_selection_train.yaml",
 )
 def main(cfg):
     # local_rank = torch.distributed.get_rank()

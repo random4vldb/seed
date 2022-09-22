@@ -79,7 +79,6 @@ def main(cfg):
     )
     model = TapasForSequenceClassification.from_pretrained("google/tapas-base")
 
-
     train_df = pd.read_json(cfg.train_file, lines=True)
     dev_df = pd.read_json(cfg.dev_file, lines=True)
 
@@ -109,7 +108,6 @@ def main(cfg):
         num_training_steps=cfg.epochs * len(train_dataloader),
     )
 
-    model.load_state_dict(torch.load(Path(cfg.output_dir) / "model.pkl"))
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
     model, optimizer, train_dataloader, dev_dataloader, scheduler = accelerate.prepare(
@@ -158,6 +156,9 @@ def main(cfg):
 
     if cfg.get("eval"):
         model.eval()
+        unwrapped_model = accelerate.unwrap_model(model)
+        unwrapped_model.load_state_dict(torch.load(Path(cfg.output_dir) / "model.pkl"))
+
         for batch in dev_dataloader:
             outputs = model(**batch)
             logits = outputs.logits

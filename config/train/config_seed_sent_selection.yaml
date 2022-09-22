@@ -1,0 +1,25 @@
+defaults:
+  - callbacks: defaults
+  - logger: wandb
+  - paths: defaults
+  - trainer: gpu
+train: False
+dev: True
+predict: True
+ckpt_path:  /root/workspace/read/models/22-09-22-06-32-59/facebook/bart-large-mnli_epoch=5-val_loss=0.01.ckpt
+model:
+  _target_: read.seed.sent_selection.module.SentSelectModule
+  model_name_or_path: facebook/bart-large-mnli
+  learning_rate: 2.0e-5
+  adam_epsilon: 1.0e-8
+  warmup_steps: 0
+  weight_decay: 0.0
+  margin: 0.5
+datamodule:
+  _target_: read.seed.sent_selection.datamodule.SentSelectDataModule
+  tokenizer: ${model.model_name_or_path}
+  num_labels: 2
+  dataset_name_or_path: temp/seed/sent_selection/data
+  train_batch_size: 16
+  eval_batch_size: 16
+  max_seq_length: 256

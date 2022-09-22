@@ -1,18 +1,10 @@
-from typing import Optional
-
 import datasets
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
-import multiprocessing
-import pandas as pd
-import json
-from pathlib import Path
-from json.decoder import JSONDecodeError
 
 
 class Seed3DataModule(LightningDataModule):
-
     def __init__(
         self,
         tokenizer: str,
@@ -31,14 +23,19 @@ class Seed3DataModule(LightningDataModule):
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.tokenizer, use_fast=True
+        self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer, use_fast=True)
+
+        self.train_dev_dataset = datasets.load_dataset(
+            "json",
+            data_files={
+                "train": f"{self.dataset_name_or_path}/train.jsonl",
+                "dev": f"{self.dataset_name_or_path}/dev.jsonl",
+            },
         )
+        self.test_dataset = datasets.load_dataset(
+            "json", data_files={"test": self.test_dataset_name_or_path}
+        )["test"]
 
-        self.train_dev_dataset = datasets.load_dataset("json", data_files={"train": f"{self.dataset_name_or_path}/train.jsonl", 'dev': f"{self.dataset_name_or_path}/dev.jsonl"})
-        self.test_dataset = datasets.load_dataset("json", data_files={"test": self.test_dataset_name_or_path})["test"]
-
-        
         remove_columns = self.train_dev_dataset["train"].column_names
         self.train_dev_dataset = self.train_dev_dataset.map(
             self.convert_to_features,
@@ -53,14 +50,13 @@ class Seed3DataModule(LightningDataModule):
             self.convert_to_test_features,
             batched=True,
             remove_columns=test_remove_columns,
-            num_proc=20
+            num_proc=20,
         )
 
         for split in self.train_dev_dataset.keys():
             self.train_dev_dataset[split].set_format(type="torch")
 
         self.test_dataset.set_format(type="torch")
-
 
     def train_dataloader(self):
         return DataLoader(
@@ -72,11 +68,10 @@ class Seed3DataModule(LightningDataModule):
 
     def val_dataloader(self):
         return DataLoader(
-                self.train_dev_dataset["train"],
-                batch_size=self.eval_batch_size,
-                num_workers=4,
-            )
-            
+            self.train_dev_dataset["train"],
+            batch_size=self.eval_batch_size,
+            num_workers=4,
+        )
 
     def test_dataloader(self):
         return DataLoader(
@@ -110,10 +105,11 @@ class Seed3DataModule(LightningDataModule):
             truncation="only_first",
         )
 
-        features["labels"] = [1] * len(texts_or_text_pairs[0]) + [0] * len(texts_or_text_pairs[1])
+        features["labels"] = [1] * len(texts_or_text_pairs[0]) + [0] * len(
+            texts_or_text_pairs[1]
+        )
 
         return features
-
 
     def convert_to_features(self, example_batch, indices=None):
         # Either encode single sentence or sentence pairs
@@ -143,5 +139,5 @@ class Seed3DataModule(LightningDataModule):
         result = {}
         for key in positives.data.keys():
             result[f"positive_{key}"] = positives[key][: len(texts_or_text_pairs[0])]
-            result[f"negative_{key}"] = positives[key][len(texts_or_text_pairs[0]):]
+            result[f"negative_{key}"] = positives[key][len(texts_or_text_pairs[0]) :]
         return result

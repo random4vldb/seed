@@ -1,5 +1,5 @@
-train_file: temp/seed/sent_selection/totto_train.jsonl
-dev_file: temp/seed/sent_selection/totto_dev.jsonl
+train_file: temp/seed/sent_selection/data/train.jsonl
+dev_file: temp/seed/sent_selection/data/dev.jsonl
 output_dir: temp/tapex/sent_selection/models/
 lr: 5e-5
 train_batch_size: 8

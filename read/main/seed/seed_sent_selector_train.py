@@ -1,12 +1,17 @@
-from sentence_transformers import SentenceTransformer, InputExample, models, losses
-from sentence_transformers.losses import TripletDistanceMetric
-from sentence_transformers.evaluation import BinaryClassificationEvaluator
-import jsonlines
-import torch.nn as nn
-from torch.utils.data import DataLoader
+import os
+import warnings
+from typing import List, Tuple
+
 import hydra
 import pyrootutils
+import pytorch_lightning as pl
+from omegaconf import DictConfig
+from pytorch_lightning import Callback, Trainer
+from pytorch_lightning.loggers import LightningLoggerBase
+
 from loguru import logger
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 root = pyrootutils.setup_root(
     search_from=__file__,
@@ -16,53 +21,67 @@ root = pyrootutils.setup_root(
     pythonpath=True,
     cwd=True,
 )
+from read.utils.hydra import instantiate_callbacks, instantiate_loggers
 
-from read.utils.table import linearize_tapex
 
+@hydra.main(version_base="1.2", config_path=root / "config" / "train", config_name="config_seed_sent_selection.yaml")
+def main(cfg: DictConfig) -> float:
 
-@hydra.main(version_base="1.2", config_path=root / "config" / "seed", config_name="seed_sent_train.yaml")
-def main(cfg):
-    examples = []
+    if cfg.get("seed"):
+        pl.seed_everything(cfg.seed, workers=True)
 
-    train_sentences1 = []
-    train_sentences2 = []
-    train_labels = []
+    logger.info(f"Instantiating data module")
+    datamodule= hydra.utils.instantiate(cfg.datamodule)
 
-    dev_sentences1 = []
-    dev_sentences2 = []
-    dev_labels = []
+    datamodule.setup("fit")
 
-    logger.info("Reading data")
+    logger.info(f"Instantiating model")
+    model = hydra.utils.instantiate(cfg.model)
 
-    for item in jsonlines.open(cfg.train_path):
-        examples.append(InputExample(texts=[item["query"], item["positive"], item["negative"]]))
+    logger.info("Instantiating loggers...")
+    loggers: List[LightningLoggerBase] = instantiate_loggers(cfg.get("logger"))
 
-        train_sentences1.extend([item["query"], item["query"]])
-        train_sentences2.extend([item["positive"], item["negative"]])
-        train_labels.extend([1, 0])
+    logger.info("Instantiating callbacks...")
+    callbacks: List[Callback] = instantiate_callbacks(cfg.get("callbacks"))
 
-    for item in jsonlines.open(cfg.dev_path):        
-        dev_sentences1.extend([item["query"], item["query"]])
-        dev_sentences2.extend([item["positive"], item["negative"]])
-        dev_labels.extend([1, 0])
+    logger.info(f"Instantiating trainer <{cfg.trainer._target_}>")
+    trainer: Trainer = hydra.utils.instantiate(
+        cfg.trainer, callbacks=callbacks, logger=loggers
+    )
 
     if cfg.get("train"):
-        word_embedding_model = models.Transformer('facebook/bart-base', max_seq_length=512)
-        pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension())
-        dense_model = models.Dense(in_features=pooling_model.get_sentence_embedding_dimension(), out_features=256, activation_function=nn.Tanh())
+        logger.info("*** Running Training ***")
+        trainer.fit(model=model, datamodule=datamodule)
 
-        model = SentenceTransformer(modules=[word_embedding_model, pooling_model, dense_model])
-
-        train_dataloader = DataLoader(examples, shuffle=True, batch_size=16)
-        train_loss = losses.TripletLoss(model=model, triplet_margin=0.5, distance_metric=TripletDistanceMetric.COSINE)
-
-        model.fit(train_objectives=[(train_dataloader, train_loss)], epochs=5, show_progress_bar=True, output_path=cfg.output_dir)
+    train_metrics = trainer.callback_metrics
+    if cfg.get("ckpt_path"):
+        ckpt_path = cfg.ckpt_path
+    else:
+        ckpt_path = trainer.checkpoint_callback.best_model_path
 
     if cfg.get("dev"):
-        model = SentenceTransformer(cfg.output_dir)
-        evaluator = BinaryClassificationEvaluator(dev_sentences1, dev_sentences2, dev_labels, name="temp/seed/sent_selection/result", show_progress_bar=True)
-        logger.info(f"Evaluation result: {evaluator(model)}")
+        logger.info("*** Running Evaluation ***")
+        if ckpt_path == "":
+            logger.warning("Best ckpt not found! Using current weights for testing...")
+            ckpt_path = None
+        trainer.validate(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
+        logger.info(f"Best ckpt path: {ckpt_path}")
+
+    if cfg.get("predict"):
+        logger.info("*** Running Prediction ***")
+        if ckpt_path == "":
+            logger.warning("Best ckpt not found! Using current weights for testing...")
+            ckpt_path = None
+        trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
+        logger.info(f"Best ckpt path: {ckpt_path}")
+
+    test_metrics = trainer.callback_metrics
+
+    # merge train and test metrics
+    metric_dict = {**train_metrics, **test_metrics}
+
+    return metric_dict
+
 
 if __name__ == "__main__":
     main()
-

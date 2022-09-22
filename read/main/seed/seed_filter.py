@@ -14,6 +14,7 @@ import pyrootutils
 import spacy
 from loguru import logger
 import tqdm
+import re
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -38,12 +39,9 @@ def numeric_ratio(table):
     total = 0
     for value in values:
         total += 1
-        try:
-            value = re.search('[a-z]', value)
-            if not value:
-                numeric += 1
-        except:
-            continue
+        value = re.search('[A-Za-z]', value)
+        if not value:
+            numeric += 1
 
     if total == 0:
         return 1.0
