@@ -33,13 +33,13 @@ def empty_ratio(table):
     return table.replace("", np.nan).isna().mean().mean()
 
 
-def numeric_ratio(table):
-    values = table.values.flatten().tolist()
+def numeric_ratio(inputs):
+    table, highlighted_cells = inputs
     numeric = 0
     total = 0
-    for value in values:
+    for i, j in highlighted_cells:
         total += 1
-        value = re.search('[A-Za-z]', value)
+        value = re.search('[A-Za-z]', str(table.iloc[i, j]))
         if not value:
             numeric += 1
 
@@ -66,17 +66,18 @@ def filter_tables(df):
 
     tables = df["table"].tolist()
 
+    highlighted_cells = df["highlighted_cells"].tolist()
     pool = Pool()
     df["empty_rate"] = pool.map(empty_ratio, tables)
     pool.close()
 
-
     pool = Pool()
-    df["numeric_rate"] = pool.map(numeric_ratio, tables)
+    df["numeric_rate"] = pool.map(numeric_ratio, zip(tables, highlighted_cells))
     pool.close()
 
-    df = df[df["numeric_rate"] + df["empty_rate"] < 0.33]    
-    df = df[df["num_cells"] > 1]
+    df = df[df["numeric_rate"]  < 0.99]    
+    df = df[df["empty_rate"]  < 0.99]    
+    df = df[df["num_cells"] >= 1]
     df = df[df["num_highlighted_cols"] <= 10]
     df = df[df["num_highlighted_rows"] <= 3]
     df = df[df["num_numeric_headers"] != df["num_cols"]]
