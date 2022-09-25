@@ -1,0 +1,2 @@
+input_file: data/wiki_history/valid_table.txt
+output_file: data/wiki_history/cleaned.jsonl

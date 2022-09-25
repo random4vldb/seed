@@ -1,4 +1,3 @@
-from collections import defaultdict
 import torch
 from pytorch_lightning import (
     LightningModule,
@@ -9,7 +8,6 @@ from transformers import (
     AutoModelForSequenceClassification,
     get_linear_schedule_with_warmup,
 )
-from yaml import load
 import torch
 import torch.nn.functional as F
 from torchmetrics import Accuracy, Precision, Recall, F1Score
@@ -40,7 +38,7 @@ class SentSelectModule(LightningModule):
         self.metrics = ModuleDict(
             [
                 [
-                    "train_new",
+                    "train_metrics",
                     ModuleDict(
                         [
                             [metric.__class__.__name__, metric]
@@ -49,7 +47,7 @@ class SentSelectModule(LightningModule):
                     ),
                 ],
                 [
-                    "val_new",
+                    "val_metrics",
                     ModuleDict(
                         [
                             [metric.__class__.__name__, metric]
@@ -88,7 +86,7 @@ class SentSelectModule(LightningModule):
 
     def training_step_end(self, outputs):
         preds = outputs["preds"]
-        for name, metric in self.metrics["train_new"].items():
+        for name, metric in self.metrics["train_metrics"].items():
             self.log(
                 f"train_{name}",
                 metric(preds < 0, torch.ones_like(preds).long()),
@@ -125,7 +123,7 @@ class SentSelectModule(LightningModule):
         loss = torch.cat([x["loss"] for x in outputs]).mean()
         preds = torch.cat([x["preds"] for x in outputs])
         self.log("val_loss", loss, prog_bar=True)
-        for name, metric in self.metrics["val_new"].items():
+        for name, metric in self.metrics["val_metrics"].items():
             self.log(
                 f"val_{name}",
                 metric(preds < 0, torch.ones_like(preds).long()),

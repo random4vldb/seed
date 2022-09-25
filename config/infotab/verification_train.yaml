@@ -5,8 +5,8 @@ rand_perm: 1
 single_sentence: 0
 max_len: 512
 tokenizer_type: roberta-large
-model_name: model_4_0.301
-output_dir: temp/totto/model
+model_name: infotab_verification
+output_dir: temp/infotab/verification/models
 model_type: roberta-large
 cache_dir: .cache/infotab/
 batch_size: 4

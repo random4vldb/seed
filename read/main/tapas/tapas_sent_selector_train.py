@@ -136,7 +136,7 @@ def main(cfg):
             model.eval()
             for batch in dev_dataloader:
                 outputs = model(**batch)
-                logits = outputs.logits.detach().cpu()
+                logits = outputs.logits
                 preds = torch.argmax(logits, dim=1)
                 labels = batch["labels"]
                 all_predictions, all_labels = accelerate.gather_for_metrics((preds, labels))
@@ -171,6 +171,7 @@ def main(cfg):
                     references=all_labels,
                 )
 
+        accelerate.print("Evaluation results:")
         for name, metric in name2torchmetric.items():
             accelerate.print(f"{name}: {metric.compute()}")
 

@@ -1,5 +1,6 @@
 from .seed import SEEDPipeline
 from loguru import logger
+from typing import List
 
 class InfotabPipeline(SEEDPipeline):
     def __init__(self, searcher, sent_selection, verifier, evaluator) -> None:

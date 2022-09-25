@@ -15,6 +15,7 @@ from transformers import (
     DataCollatorWithPadding,
 )
 from tqdm import tqdm
+import evaluate
 
 root = pyrootutils.setup_root(
     search_from=__file__,
@@ -35,9 +36,9 @@ class TableDataset(torch.utils.data.Dataset):
         idx = idx // 2
         item = self.df.iloc[idx]
         if ex_id == 0:
-            table = pd.DataFrame(json.loads(item["positive"]))
+            table = pd.DataFrame(json.loads(item["positive_table"]))
         else:
-            table = pd.DataFrame(json.loads(item["negative"]))
+            table = pd.DataFrame(json.loads(item["negative_table"]))
         cells = zip(*item["highlighted_cells"])
         cells = [list(x) for x in cells]
         sub_table = table.iloc[cells[0], cells[1]].reset_index().astype(str)
@@ -61,7 +62,7 @@ class TableDataset(torch.utils.data.Dataset):
         return len(self.df)
 
 
-@hydra.main(version_base="1.2", config_path=root / "config" / "tapas", config_name="tapas_sent_train.yaml")
+@hydra.main(version_base="1.2", config_path=root / "config" / "tapas", config_name="tapas_verification_train.yaml")
 def main(cfg):
     tokenizer = TapasTokenizer.from_pretrained("google/tapas-base")
     model = TapasForSequenceClassification.from_pretrained("google/tapas-base")
@@ -88,39 +89,73 @@ def main(cfg):
         model, optimizer, train_dataloader, dev_dataloader, scheduler
     )
 
+    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
+    model, optimizer, train_dataloader, dev_dataloader, scheduler = accelerate.prepare(
+        model, optimizer, train_dataloader, dev_dataloader, scheduler
+    ) 
+
     name2torchmetric = {
-        "accuracy": Accuracy(), 
-        "precision": Precision(), 
-        "recall": Recall(), 
-        "f1": F1Score()
+        "accuracy": evaluate.load("accuracy"),
+        "precision": evaluate.load("precision"),
+        "recall": evaluate.load("recall"),
+        "f1": evaluate.load("f1"),
     }
 
+    if cfg.get("train"):
+        for epoch in range(cfg.epochs):
+            model.train()
+            logger.info(f"Epoch {epoch}")
+            for batch in tqdm(train_dataloader):
+                outputs = model(**batch)
+                loss = outputs.loss
+                accelerate.backward(loss)
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
 
-    for epoch in range(cfg.epochs):
-        model.train()
-        logger.info(f"Epoch {epoch}")
-        for batch in tqdm(train_dataloader):
-            outputs = model(**batch)
-            loss = outputs.loss
-            accelerate.backward(loss)
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad()
+            model.eval()
+            for batch in dev_dataloader:
+                outputs = model(**batch)
+                logits = outputs.logits
+                preds = torch.argmax(logits, dim=1)
+                labels = batch["labels"]
+                all_predictions, all_labels = accelerate.gather_for_metrics((preds, labels))
+                for name, metric in name2torchmetric.items():
+                    metric.add_batch(
+                        predictions=all_predictions,
+                        references=all_labels,
+                    )
 
+            for name, metric in name2torchmetric.items():
+                accelerate.print(f"{name}: {metric.compute()}")
+        
+        Path(cfg.output_dir).mkdir(parents=True, exist_ok=True)
+        model = accelerate.unwrap_model(model)
+        state_dict = model.state_dict()
+        accelerate.save(state_dict, Path(cfg.output_dir) / "model.pkl")
+
+        accelerate.print("Save model to {}".format(Path(cfg.output_dir) / "model.pkl"))
+
+    if cfg.get("eval"):
         model.eval()
+        if accelerate.is_main_process:
+            unwrapped_model = accelerate.unwrap_model(model)
+            unwrapped_model.load_state_dict(torch.load(Path(cfg.output_dir) / "model.pkl"))
+
         for batch in dev_dataloader:
             outputs = model(**batch)
             logits = outputs.logits
+            preds = torch.argmax(logits, dim=1)
             labels = batch["labels"]
+            all_predictions, all_labels = accelerate.gather_for_metrics((preds, labels))
             for name, metric in name2torchmetric.items():
-                metric(logits, labels)
+                metric.add_batch(
+                    predictions=all_predictions,
+                    references=all_labels,
+                )
 
         for name, metric in name2torchmetric.items():
-            logger.info(f"{name}: {metric.compute()}")
-            metric.reset()
-
-    Path(cfg.output_dir).mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(cfg.output_dir)
+            accelerate.print(f"{name}: {metric.compute()}")
 
 if __name__ == "__main__":
     main()

@@ -32,6 +32,7 @@ def main(cfg):
                         "label": 1,
                         "table": obj["positive_table"],
                         "title": obj["title"],
+                        "highlighted_cells": obj["highlighted_cells"],
                     }
                 )
                 examples.append(
@@ -40,6 +41,7 @@ def main(cfg):
                         "label": 0,
                         "table": obj["negative_table"],
                         "title": obj["title"],
+                        "highlighted_cells": obj["highlighted_cells"],
                     }
                 )
 

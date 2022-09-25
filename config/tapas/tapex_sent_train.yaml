@@ -2,6 +2,6 @@ train_file: temp/seed/sent_selection/data/train.jsonl
 dev_file: temp/seed/sent_selection/data/dev.jsonl
 output_dir: temp/tapex/sent_selection/models/
 lr: 5e-5
-train_batch_size: 8
-eval_batch_size: 8
+train_batch_size: 4
+eval_batch_size: 4
 num_epochs: 5
