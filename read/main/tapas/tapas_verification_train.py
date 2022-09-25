@@ -141,6 +141,7 @@ def main(cfg):
         if accelerate.is_main_process:
             unwrapped_model = accelerate.unwrap_model(model)
             unwrapped_model.load_state_dict(torch.load(Path(cfg.output_dir) / "model.pkl"))
+            accelerate.print("Load model from {}".format(Path(cfg.output_dir) / "model.pkl"))
 
         for batch in dev_dataloader:
             outputs = model(**batch)
