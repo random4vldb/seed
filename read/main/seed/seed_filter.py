@@ -171,7 +171,7 @@ def generate(df):
     valid_df = valid_df[valid_df["negatives"].notnull()]
 
 
-    df.loc[: ,"negatives"] = None
+    df.loc[: ,"negatives"] = "True"
 
     final_df = pd.concat([df, valid_df], axis=0)
 
@@ -244,14 +244,14 @@ def main(cfg):
                 triple["positive_table"] = ex1["table"].to_json(orient="records")
                 triple["negative_table"] = ex2["table"].to_json(orient="records")
                 triple["highlighted_cells"] = ex1["highlighted_cells"]
-                triple["note"] = ex2["negatives"]
+                triple["answer"] = ex2["negatives"]
             else:
                 triple["negative"] = ex1["subtable_metadata_str"]
                 triple["positive"] = ex2["subtable_metadata_str"]
                 triple["positive_table"] = ex2["table"].to_json(orient="records")
                 triple["negative_table"] = ex1["table"].to_json(orient="records")
                 triple["highlighted_cells"] = ex1["highlighted_cells"]
-                triple["note"] = ex1["negatives"]
+                triple["answer"] = ex1["negatives"]
                 
             triple["sentence"] = ex1["sentence"]
             triple["title"] = ex1["table_page_title"]

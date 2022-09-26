@@ -55,7 +55,7 @@ def tokenize(batch, tokenizer):
 
     negative_encodings = tokenizer(
         negative_tables,
-        batch["sentence"]
+        batch["sentence"],
         padding="max_length",
         truncation=True,
         max_length=512,
@@ -74,7 +74,7 @@ def tokenize(batch, tokenizer):
 @hydra.main(
     version_base="1.2",
     config_path=root / "config" / "tapas",
-    config_name="tapex_sent_train.yaml",
+    config_name="tapex_verification_train.yaml",
 )
 def main(cfg):
     tokenizer = TapexTokenizer.from_pretrained("microsoft/tapex-base")
@@ -84,7 +84,7 @@ def main(cfg):
         "json", data_files={"train": cfg.train_file, "dev": cfg.dev_file}
     )
 
-    columns = datasets.column_names
+    columns = datasets["train"].column_names
 
     datasets = datasets.map(
         lambda x: tokenize(x, tokenizer),

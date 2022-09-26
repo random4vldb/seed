@@ -1,15 +1,17 @@
 from sentence_transformers import SentenceTransformer, util
+from .module import SentSelectModule
+from transformers import AutoTokenizer
 
 class SentenceSelector:
-    def __init__(self, model_name_or_path: str, threshold: float = 0.32) -> None:
-        self.model = SentenceTransformer(model_name_or_path)
-        self.threshold = threshold
+    def __init__(self, model_name_or_path: str, tokenizer: str) -> None:
+        self.model = SentSelectModule.load_from_checkpoint(model_name_or_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer)
 
 
     def __call__(self, queries, sentences, indices):
-        enc1 = self.model.encode(queries)
-        enc2 = self.model.encode(sentences)
+        inputs  = self.tokenizer(queries, sentences, padding=True, truncation=True, return_tensors="pt")
+        outputs = self.model(**inputs)
 
-
-        return util.pairwise_cos_sim(enc1, enc2) > self.threshold
+        preds = outputs.logits.argmax(dim=1)
+        return preds
 
