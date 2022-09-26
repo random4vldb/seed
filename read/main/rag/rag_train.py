@@ -1,14 +1,17 @@
-import ujson as json
-import random
-import logging
-import torch
-import torch.nn.functional as F
-import hydra
-import jsonlines
-from transformers import RagTokenizer, RagTokenForGeneration
-from loguru import logger
-import pyrootutils
+import os
+import warnings
+from typing import List, Tuple
 
+import hydra
+import pyrootutils
+import pytorch_lightning as pl
+from omegaconf import DictConfig
+from pytorch_lightning import Callback, Trainer
+from pytorch_lightning.loggers import LightningLoggerBase
+
+from loguru import logger
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 root = pyrootutils.setup_root(
     search_from=__file__,
@@ -18,124 +21,65 @@ root = pyrootutils.setup_root(
     pythonpath=True,
     cwd=True,
 )
-
-from read.dpr.searcher import DPRSearcher
-
-
-class Options(KgiHypers):
-    def __init__(self):
-        super().__init__()
-        # TODO: test positive pid training
-        self.include_positive_pids = ''
-        self.provenance_loss_weight = 1.0
+from read.utils.hydra import instantiate_callbacks, instantiate_loggers
 
 
-hypers = Options().fill_from_args()
+@hydra.main(version_base="1.2", config_path=root / "config" / "train", config_name="config_rag.yaml")
+def main(cfg: DictConfig) -> float:
+
+    if cfg.get("seed"):
+        pl.seed_everything(cfg.seed, workers=True)
+
+    logger.info(f"Instantiating data module")
+    datamodule= hydra.utils.instantiate(cfg.datamodule)
+
+    datamodule.setup("fit")
+
+    logger.info(f"Instantiating model")
+    model = hydra.utils.instantiate(cfg.model)
+
+    logger.info("Instantiating loggers...")
+    loggers: List[LightningLoggerBase] = instantiate_loggers(cfg.get("logger"))
+
+    logger.info("Instantiating callbacks...")
+    callbacks: List[Callback] = instantiate_callbacks(cfg.get("callbacks"))
+
+    logger.info(f"Instantiating trainer <{cfg.trainer._target_}>")
+    trainer: Trainer = hydra.utils.instantiate(
+        cfg.trainer, callbacks=callbacks, logger=loggers
+    )
+
+    if cfg.get("train"):
+        logger.info("*** Running Training ***")
+        trainer.fit(model=model, datamodule=datamodule)
+
+    train_metrics = trainer.callback_metrics
+
+    if cfg.get("dev"):
+        logger.info("*** Running Evaluation ***")
+        ckpt_path = trainer.checkpoint_callback.best_model_path
+        if ckpt_path == "":
+            logger.warning("Best ckpt not found! Using current weights for testing...")
+            ckpt_path = None
+        trainer.validate(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
+        logger.info(f"Best ckpt path: {ckpt_path}")
+
+    if cfg.get("predict"):
+        logger.info("*** Running Prediction ***")
+        ckpt_path = trainer.checkpoint_callback.best_model_path
+        if ckpt_path == "":
+            logger.warning("Best ckpt not found! Using current weights for testing...")
+            ckpt_path = None
+        trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
+        logger.info(f"Best ckpt path: {ckpt_path}")
+
+    test_metrics = trainer.callback_metrics
+
+    # merge train and test metrics
+    metric_dict = {**train_metrics, **test_metrics}
+
+    return metric_dict
 
 
-def retrieve(queries, tokenizer):
-    features = tokenizer(queries, padding=True, truncation=True, return_tensors="pt", max_length=hypers.max_seq_length)
-    with tokenizer.as_target_tokenizer():
-        labels = tokenizer(queries, padding=True, truncation=True, return_tensors="pt")["input_ids"]
-    input_dict = prepare_seq2seq_batch(tokenizer, queries, return_tensors="pt",
-                                       max_length=hypers.max_context_length)
-    input_ids = input_dict['input_ids'].to(model.device)
-    attention_mask = input_dict['attention_mask'].to(model.device)
-    context_input_ids, context_attention_mask, doc_scores, docs = \
-        rest_retriever.retrieve(input_ids, attention_mask, n_docs=hypers.n_docs)
-    return context_input_ids.reshape(len(queries) * hypers.n_docs, -1), \
-           context_attention_mask.reshape(len(queries) * hypers.n_docs, -1), \
-           doc_scores.reshape(len(queries), hypers.n_docs), \
-           input_ids, attention_mask, docs
-
-
-def one_batch(queries, answers, id_batch, tokenizer):
-    global batch_count
-    context_input_ids, context_attention_mask, doc_scores, input_ids, attention_mask, docs = retrieve(queries)
-
-    panswers = prefered_answers(answers, docs, prefer_extractive=hypers.prefer_extractive)
-    labels = prepare_seq2seq_batch_labels(tokenizer, panswers, return_tensors="pt",
-                                          max_target_length=hypers.max_target_length).to(optimizer.hypers.device)
-
-    if inst_id2pos_pids:
-        gold_pids = [inst_id2pos_pids[inst_id] for inst_id in id_batch]
-        target_mask = [[pid in positive_pids for pid in qdocs['pid']] for qdocs, positive_pids in zip(docs, gold_pids)]
-        target_mask = torch.tensor(target_mask, dtype=torch.bool).to(optimizer.hypers.device)
-        assert target_mask.shape == doc_scores.shape
-        provenance_nll = -(F.log_softmax(doc_scores, dim=0).view(-1)[target_mask.view(-1)].sum())
-    else:
-        provenance_nll = 0
-    outputs = optimizer.model(labels=labels,
-                              context_input_ids=context_input_ids, context_attention_mask=context_attention_mask,
-                              doc_scores=doc_scores)
-    if batch_count == 0:
-        print(f'logits shape = {outputs.logits.shape}')
-    batch_count += 1
-    loss = outputs.loss.mean() + hypers.provenance_loss_weight * provenance_nll
-    loss_history.note_loss(loss.item())
-    optimizer.step_loss(loss,
-                        retrieval_time=rest_retriever.retrieval_time/(batch_count * hypers.per_gpu_train_batch_size))
-
-
-
-@hydra.main(
-    version_base="1.2", config_path=root / "config" / "rag", config_name="rag_train.yaml"
-)
-def main(cfg):
-    inst_id2pos_pids = dict()
-    with jsonlines.open(cfg.include_positive_pids) as reader:
-        for obj in reader:
-            inst_id2pos_pids[obj['inst_id']] = obj['positive_pids']
-
-    tokenizer = RagTokenizer.from_pretrained(cfg.model_name_or_path)
-    model = RagTokenForGeneration.from_pretrained(cfg.model_name_or_path)
-
-    model.train()
-    # construct rest retriever after the model
-    searcher = DPRSearcher(cfg)
-    rand = random.Random(hypers.seed)
-    if hypers.fold:
-        fold_num, fold_count = [int(part.strip()) for part in hypers.fold.split('of')]
-        assert fold_num <= fold_count
-        assert fold_count >= 1
-        rel_by_fold, count_by_fold = get_relations_by_fold(hypers.kilt_data, fold_count)
-        print(f'instance distribution by fold = {count_by_fold/count_by_fold.sum()}')
-    else:
-        fold_num, fold_count = 1, 1
-        rel_by_fold = []
-    query_batch = []
-    answer_batch = []
-    id_batch = []
-    while True:
-        optimizer.model.train()
-        dataset = read_lines(hypers.kilt_data, shuffled_files=rand)
-        for line_ndx, line in enumerate(block_shuffle(dataset, rand=rand, block_size=100000)):
-            if line_ndx % hypers.world_size != hypers.global_rank:
-                continue
-            inst = json.loads(line)
-            if hypers.fold:
-                relation = get_relation_from_inst(inst)
-                if relation in rel_by_fold[fold_num-1]:
-                    # we exclude one fold
-                    continue
-            input_text = inst['input']
-            query_batch.append(input_text)
-            answer_batch.append(kilt_answers(inst,
-                                             normalize_train_answer=hypers.normalize_train_answer,
-                                             prefer_extractive=hypers.prefer_extractive,
-                                             no_leading_space=hypers.no_leading_space))
-
-            id_batch.append(inst['id'])
-            if len(query_batch) == hypers.per_gpu_train_batch_size * hypers.n_gpu:
-                one_batch(query_batch, answer_batch, id_batch)
-                if not optimizer.should_continue():
-                    return
-                query_batch = []
-                answer_batch = []
-                id_batch = []
-
-
-train()
-(optimizer.model.module if hasattr(optimizer.model, "module") else optimizer.model).save_pretrained(hypers.output_dir)
-logger.info(f'loss_history = {loss_history.loss_history}')
-hypers.cleanup_corpus_server()
+if __name__ == "__main__":
+    main()

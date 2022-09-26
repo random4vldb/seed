@@ -1,6 +1,6 @@
-train_file: temp/seed/nli_data/train.jsonl
-dev_file: temp/seed/nli_data/dev.jsonl
-test_file: temp/seed/nli_data/dev.jsonl
+train_file: temp/infotab/verification/train.jsonl
+dev_file: temp/infotab/verification/dev.jsonl
+test_file: temp/infotab/verification/dev.jsonl
 rand_perm: 1
 single_sentence: 0
 max_len: 512
