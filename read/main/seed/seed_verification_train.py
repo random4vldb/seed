@@ -1,6 +1,5 @@
-import os
 import warnings
-from typing import List, Tuple
+from typing import List
 
 import hydra
 import pyrootutils
@@ -55,9 +54,13 @@ def main(cfg: DictConfig) -> float:
 
     train_metrics = trainer.callback_metrics
 
+    if cfg.get("ckpt_path"):
+        ckpt_path = cfg.ckpt_path
+    else:
+        ckpt_path = trainer.checkpoint_callback.best_model_path
+
     if cfg.get("dev"):
         logger.info("*** Running Evaluation ***")
-        ckpt_path = trainer.checkpoint_callback.best_model_path
         if ckpt_path == "":
             logger.warning("Best ckpt not found! Using current weights for testing...")
             ckpt_path = None
@@ -66,7 +69,6 @@ def main(cfg: DictConfig) -> float:
 
     if cfg.get("predict"):
         logger.info("*** Running Prediction ***")
-        ckpt_path = trainer.checkpoint_callback.best_model_path
         if ckpt_path == "":
             logger.warning("Best ckpt not found! Using current weights for testing...")
             ckpt_path = None

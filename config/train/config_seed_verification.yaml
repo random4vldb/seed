@@ -3,9 +3,10 @@ defaults:
   - logger: wandb
   - paths: defaults
   - trainer: gpu
-train: True
+train: False
 dev: True
 predict: True
+ckpt_path: /root/workspace/read/models/22-09-26-01-03-41/facebook/bart-large-mnli_epoch=8-val_loss=0.04.ckpt
 model:
   _target_: read.seed.verification.module.Seed3Module
   model_name_or_path: facebook/bart-large-mnli

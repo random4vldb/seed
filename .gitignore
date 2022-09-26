@@ -13,3 +13,4 @@ wandb/
 pyserini_*
 poetry.lock
 .cache
+.vscode

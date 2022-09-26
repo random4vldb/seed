@@ -10,9 +10,11 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 from yaml import load
-import torchmetrics
+from torchmetrics import Accuracy, Precision, Recall, F1Score
 import torch
 import torch.nn.functional as F
+from torch.nn import ModuleDict
+import evaluate
 
 
 class Seed3Module(LightningModule):
@@ -30,52 +32,115 @@ class Seed3Module(LightningModule):
 
         self.save_hyperparameters()
 
-        self.config = AutoConfig.from_pretrained(
-            model_name_or_path, num_labels=2
-        )
+        self.config = AutoConfig.from_pretrained(model_name_or_path, num_labels=2)
         self.model = AutoModelForSequenceClassification.from_pretrained(
             model_name_or_path, config=self.config, ignore_mismatched_sizes=True
         )
 
-        self.metrics = defaultdict(dict)
+        self.metrics = {
+            "train": {
+                "accuracy": evaluate.load("accuracy"),
+                "precision": evaluate.load("precision"),
+                "recall": evaluate.load("recall"),
+                "f1": evaluate.load("f1"),
+            },
+            "val_metrics": {
+                "accuracy": evaluate.load("accuracy"),
+                "precision": evaluate.load("precision"),
+                "recall": evaluate.load("recall"),
+                "f1": evaluate.load("f1"),
+            },
+        }
 
-        self.train_acc = torchmetrics.Accuracy(num_labels=2)
-
-        self.metrics["train"] = {"acc": self.train_acc}
-
-        self.val_acc = torchmetrics.Accuracy(num_labels=2)
-
-        self.metrics["val"] = {"acc": self.val_acc}
-
-        self.test_acc = torchmetrics.Accuracy(num_labels=2)
-
-        self.metrics["test"] = {"acc": self.test_acc}
+        self.metrics = ModuleDict(
+            [
+                [
+                    "train_metrics",
+                    ModuleDict(
+                        [
+                            [metric.__class__.__name__, metric]
+                            for metric in [Accuracy(), Precision(), Recall(), F1Score()]
+                        ]
+                    ),
+                ],
+                [
+                    "val_metrics",
+                    ModuleDict(
+                        [
+                            [metric.__class__.__name__, metric]
+                            for metric in [Accuracy(), Precision(), Recall(), F1Score()]
+                        ]
+                    ),
+                ],
+                [
+                    "test_metrics",
+                    ModuleDict(
+                        [
+                            [metric.__class__.__name__, metric]
+                            for metric in [Accuracy(), Precision(), Recall(), F1Score()]
+                        ]
+                    ),
+                ],
+            ]
+        )
 
     def forward(self, **inputs):
         return self.model(**{k: v.long() for k, v in inputs.items()})
-        
 
     def training_step(self, batch, batch_idx):
-        outputs1 = self(**{k.replace("positive_", ""): v for k, v in batch.items() if "positive_" in k})
-        outputs2 = self(**{k.replace("negative_", ""): v for k, v in batch.items() if "negative_" in k})
-        preds = torch.softmax(outputs1.logits, dim=1)[:, 0] - torch.softmax(outputs2.logits, dim=1)[:, 0]
-        loss = F.relu(preds + self.hparams.margin).mean()        
+        outputs1 = self(
+            **{
+                k.replace("positive_", ""): v
+                for k, v in batch.items()
+                if "positive_" in k
+            }
+        )
+        outputs2 = self(
+            **{
+                k.replace("negative_", ""): v
+                for k, v in batch.items()
+                if "negative_" in k
+            }
+        )
+        preds = (
+            torch.softmax(outputs1.logits, dim=1)[:, 0]
+            - torch.softmax(outputs2.logits, dim=1)[:, 0]
+        )
+        loss = F.relu(preds + self.hparams.margin).mean()
         self.log("train_loss", loss, on_step=True, on_epoch=False)
         return {"loss": loss, "preds": preds}
 
     def training_step_end(self, outputs):
         preds = outputs["preds"]
         for name, metric in self.metrics["train"].items():
-            self.log(f"train_{name}", metric(preds < 0, torch.ones_like(preds).long()), prog_bar=True)
+            self.log(
+                f"train_{name}",
+                metric(preds < 0, torch.ones_like(preds).long()),
+                prog_bar=True,
+            )
 
-        return outputs['loss'].sum()
-
+        return outputs["loss"].sum()
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        outputs1 = self(**{k.replace("positive_", ""): v for k, v in batch.items() if "positive_" in k})
-        outputs2 = self(**{k.replace("negative_", ""): v for k, v in batch.items() if "negative_" in k})
-        preds = torch.softmax(outputs1.logits, dim=1)[:, 0] - torch.softmax(outputs2.logits, dim=1)[:, 0] 
-        loss = F.relu(preds + self.hparams.margin).mean()     
+        outputs1 = self(
+            **{
+                k.replace("positive_", ""): v
+                for k, v in batch.items()
+                if "positive_" in k
+            }
+        )
+        outputs2 = self(
+            **{
+                k.replace("negative_", ""): v
+                for k, v in batch.items()
+                if "negative_" in k
+            }
+        )
+        preds = (
+            torch.softmax(outputs1.logits, dim=1)[:, 0]
+            - torch.softmax(outputs2.logits, dim=1)[:, 0]
+        )
+        loss = F.relu(preds + self.hparams.margin).mean()
         self.log("val_loss", loss, on_step=True, on_epoch=False)
 
         return {"loss": loss, "preds": preds}
@@ -84,20 +149,26 @@ class Seed3Module(LightningModule):
         loss = torch.cat([x["loss"] for x in outputs]).mean()
         preds = torch.cat([x["preds"] for x in outputs])
         self.log("val_loss", loss, prog_bar=True)
-        for name, metric in self.metrics["val"].items():
-            self.log(f"val_{name}", metric(preds < 0, torch.ones_like(preds).long()), prog_bar=True, on_epoch=True)
+        for name, metric in self.metrics["val_metrics"].items():
+            self.log(
+                f"val_{name}",
+                metric(preds < 0, torch.ones_like(preds).long()),
+                prog_bar=True,
+                on_epoch=True,
+            )
 
     def test_step(self, batch, batch_idx, dataloader_idx=0):
         outputs = self(**batch)
         preds = torch.argmax(outputs.logits, dim=1)
         return {"preds": preds, "labels": batch["labels"]}
 
-
     def test_epoch_end(self, outputs):
         preds = torch.cat([x["preds"] for x in outputs])
         labels = torch.cat([x["labels"] for x in outputs])
-        for name, metric in self.metrics["test"].items():
-            self.log(f"test_{name}", metric(preds, labels), prog_bar=True, on_epoch=True)
+        for name, metric in self.metrics["test_metrics"].items():
+            self.log(
+                f"test_{name}", metric(preds, labels), prog_bar=True, on_epoch=True
+            )
 
     def configure_optimizers(self):
         """Prepare optimizer and schedule (linear warmup and decay)"""
