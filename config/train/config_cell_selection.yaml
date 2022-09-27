@@ -20,6 +20,6 @@ datamodule:
   num_labels: 2
   dataset_name_or_path: data/totto/triplets
   test_dataset_name_or_path: data/totto/augmented/dev.jsonl
-  train_batch_size: 4
-  eval_batch_size: 4
+  train_batch_size: 1
+  eval_batch_size: 1
   max_seq_length: 256

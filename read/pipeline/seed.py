@@ -2,7 +2,8 @@ import pyrootutils
 from typing import List
 from kilt.knowledge_source import KnowledgeSource
 from blingfire import text_to_sentences
-from read.utils.exp import ResultAnalyzer
+
+from read.seed.verification.verifier import TableVerifier
 
 
 root = pyrootutils.setup_root(
@@ -17,9 +18,7 @@ root = pyrootutils.setup_root(
 
 from read.dpr.searcher import DPRSearcher, HybridSearcher
 from read.seed.sent_selection import SentenceSelector
-from read.seed.verifier import NLIVerifier
 from read.metrics.pipeline import PipelineModule
-from loguru import logger 
 
 
 class SEEDPipeline:
@@ -35,15 +34,15 @@ class SEEDPipeline:
         if cfg.searcher.type == "dpr":
             return SEEDPipeline(
                 searcher=DPRSearcher(cfg.searcher.faiss_index, cfg.searcher.lucene_index, cfg.searcher.qry_encoder),
-                sent_selection=SentenceSelector(cfg.sent_selection.model),
-                verifier=NLIVerifier(cfg.verifier.model, cfg.verifier.tokenizer),
+                sent_selection=SentenceSelector(cfg.sent_selection.model, cfg.sent_selection.tokenizer),
+                verifier=TableVerifier(cfg.verifier.model, cfg.verifier.tokenizer),
                 evaluator=evaluator
             )
         elif cfg.searcher.type == "hybrid":
             return SEEDPipeline(
                 searcher=HybridSearcher(cfg.searcher.lucene_index, cfg.searcher.qry_encoder, cfg.searcher.ctx_encoder),
-                sent_selection=SentenceSelector(cfg.sent_selection.model),
-                verifier=NLIVerifier(cfg.verifier.model, cfg.verifier.tokenizer),
+                sent_selection=SentenceSelector(cfg.sent_selection.model, cfg.sent_selection.tokenizer),
+                verifier=TableVerifier(cfg.verifier.model, cfg.verifier.tokenizer),
                 evaluator=evaluator
             )
         
@@ -80,6 +79,7 @@ class SEEDPipeline:
 
         sent_results = []
         
+
         selected_mask = self.sent_selection(*zip(*table_with_sent))
         result = [False] * len(table_with_sent)
         for i, (table, sent, idx) in enumerate(table_with_sent):
@@ -91,17 +91,21 @@ class SEEDPipeline:
 
         self.evaluator.update(PipelineModule.SENTENCE_SELECTION, *zip(*sent_results))
 
+
         final_result = [False] * len(examples)
         table_results = []
         for i in range(len(result)):
             for j, ex in enumerate(examples):
                 if ex["linearized_table"] == table_with_sent[i][0] and result[i] == True:
                     final_result[j] = True
-                    table_results.append((True, examples[j]["label"], j))
+                    table_results.append((True, bool(examples[j]["label"]), j))
                     break
-            else:
-                table_results.append((False, examples[j]["label"], j))
 
+        for i, result in enumerate(final_result):
+            if result == False:
+                table_results.append((False, bool(examples[i]["label"]), i))    
+            else:
+                table_results.append((True, bool(examples[i]["label"]), i))   
         self.evaluator.update(PipelineModule.TABLE_VERIFICATION, *zip(*table_results))
         
         return final_result

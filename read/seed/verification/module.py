@@ -1,4 +1,3 @@
-from collections import defaultdict
 import torch
 from pytorch_lightning import (
     LightningModule,
@@ -9,7 +8,6 @@ from transformers import (
     AutoModelForSequenceClassification,
     get_linear_schedule_with_warmup,
 )
-from yaml import load
 from torchmetrics import Accuracy, Precision, Recall, F1Score
 import torch
 import torch.nn.functional as F
@@ -88,71 +86,51 @@ class Seed3Module(LightningModule):
         return self.model(**{k: v.long() for k, v in inputs.items()})
 
     def training_step(self, batch, batch_idx):
-        outputs1 = self(
-            **{
-                k.replace("positive_", ""): v
-                for k, v in batch.items()
-                if "positive_" in k
-            }
+        outputs = self(
+            **batch
         )
-        outputs2 = self(
-            **{
-                k.replace("negative_", ""): v
-                for k, v in batch.items()
-                if "negative_" in k
-            }
-        )
+
         preds = (
-            torch.softmax(outputs1.logits, dim=1)[:, 0]
-            - torch.softmax(outputs2.logits, dim=1)[:, 0]
+            torch.log_softmax(outputs.logits, dim=1)
         )
-        loss = F.relu(preds + self.hparams.margin).mean()
+        loss = F.nll_loss(preds, batch["labels"])
         self.log("train_loss", loss, on_step=True, on_epoch=False)
-        return {"loss": loss, "preds": preds}
+        return {"loss": loss, "preds": torch.argmax(preds, dim=1), "labels": batch["labels"]}
 
     def training_step_end(self, outputs):
         preds = outputs["preds"]
+        labels = outputs["labels"]
         for name, metric in self.metrics["train"].items():
             self.log(
                 f"train_{name}",
-                metric(preds < 0, torch.ones_like(preds).long()),
+                metric(preds, labels),
                 prog_bar=True,
             )
 
         return outputs["loss"].sum()
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        outputs1 = self(
-            **{
-                k.replace("positive_", ""): v
-                for k, v in batch.items()
-                if "positive_" in k
-            }
+        outputs = self(
+            **batch
         )
-        outputs2 = self(
-            **{
-                k.replace("negative_", ""): v
-                for k, v in batch.items()
-                if "negative_" in k
-            }
-        )
-        preds = (
-            torch.softmax(outputs1.logits, dim=1)[:, 0]
-            - torch.softmax(outputs2.logits, dim=1)[:, 0]
-        )
-        loss = F.relu(preds + self.hparams.margin).mean()
-        self.log("val_loss", loss, on_step=True, on_epoch=False)
 
-        return {"loss": loss, "preds": preds}
+        preds = (
+            torch.log_softmax(outputs.logits, dim=1)
+        )
+        loss = F.nll_loss(preds, batch["labels"])
+        self.log("val_loss", loss, on_step=True, on_epoch=False)
+        return {"loss": loss, "preds": torch.argmax(preds, dim=1), "labels": batch["labels"]}
+
 
     def validation_epoch_end(self, outputs):
         loss = torch.cat([x["loss"] for x in outputs]).mean()
         preds = torch.cat([x["preds"] for x in outputs])
+        labels = torch.cat([x["labels"] for x in outputs])
         self.log("val_loss", loss, prog_bar=True)
         for name, metric in self.metrics["val_metrics"].items():
             self.log(
                 f"val_{name}",
-                metric(preds < 0, torch.ones_like(preds).long()),
+                metric(preds, labels),
                 prog_bar=True,
                 on_epoch=True,
             )

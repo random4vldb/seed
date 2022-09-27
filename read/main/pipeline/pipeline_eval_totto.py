@@ -1,11 +1,8 @@
 import hydra
 import pyrootutils
 import jsonlines
-import torchmetrics
 from loguru import logger
-import torch
 import random
-import json
 
 from read.pipeline.seed import SEEDPipeline
 
@@ -53,7 +50,9 @@ def main(cfg):
         gold_batch.append(data[i]["label"])
 
         if len(batch) == cfg.batch_size:
+            logger.info(f"Processing batch of size {len(batch)}")
             result = pipeline(batch)
+            logger.info(f"Got {len(result)} predictions")
             predictions.extend(result)
             golds.extend(gold_batch)
             batch = []
@@ -66,7 +65,7 @@ def main(cfg):
         golds.extend(gold_batch)
 
 
-    report.print()
+    report.report()
 
 if __name__ == "__main__":
     main()

@@ -112,14 +112,15 @@ class SentSelectDataModule(LightningDataModule):
 
         # Tokenize the text/text pairs
         assert len(texts_or_text_pairs[0]) == len(texts_or_text_pairs[1])
-        positives = self.tokenizer(
+        inputs = self.tokenizer(
             texts_or_text_pairs[0] + texts_or_text_pairs[1],
             max_length=self.max_seq_length,
             padding="max_length",
             truncation=True,
         )
-        result = {}
-        for key in positives.data.keys():
-            result[f"positive_{key}"] = positives[key][: len(texts_or_text_pairs[0])]
-            result[f"negative_{key}"] = positives[key][len(texts_or_text_pairs[0]):]
-        return result
+        # result = {}
+        # for key in positives.data.keys():
+        #     result[f"positive_{key}"] = positives[key][: len(texts_or_text_pairs[0])]
+        #     result[f"negative_{key}"] = positives[key][len(texts_or_text_pairs[0]):]
+        inputs["labels"] = [1] * len(texts_or_text_pairs[0]) + [0] * len(texts_or_text_pairs[1])
+        return inputs

@@ -7,7 +7,8 @@ searcher:
   qry_encoder: temp/dpr_model/qry_encoder_dpr
   ctx_encoder: temp/dpr_model/ctx_encoder_dpr
 sent_selection:
-  model: temp/seed/sent_selection/model
-verifier:
-  model: models/22-09-04-02-43-32/facebook/bart-large-mnli_epoch=8-val_loss=0.02.ckpt
+  model: temp/seed/sent_selection/models/model.ckpt
   tokenizer: facebook/bart-large
+verifier:
+  model: temp/seed/verification/models/model.ckpt
+  tokenizer: facebook/bart-large-mnli

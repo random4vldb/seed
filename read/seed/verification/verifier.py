@@ -1,9 +1,9 @@
-from read.seed.module import Seed3Module
+from read.seed.verification.module import Seed3Module
 from transformers import AutoTokenizer
 import torch
 
 
-class NLIVerifier:
+class TableVerifier:
     def __init__(self, model_path, tokenizer):
         self.nli_model = Seed3Module.load_from_checkpoint(model_path)
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer, use_fast=True)

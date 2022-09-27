@@ -13,9 +13,9 @@ import torch
 
 
 class PipelineModule:
-    DOCUMENT_RETRIEVAL = 1
-    SENTENCE_SELECTION = 2
-    TABLE_VERIFICATION = 3
+    DOCUMENT_RETRIEVAL = "document_retrieval"
+    SENTENCE_SELECTION = "sentence_selection"
+    TABLE_VERIFICATION = "table_verification"
 
 class PipelineEvaluator:
 
@@ -30,6 +30,7 @@ class PipelineEvaluator:
             else:
                 for metric in [Accuracy, F1Score, Precision, Recall]:
                     self.stage2metrics[stage][metric.__class__.__name__] = metric()
+        print(self.stage2metrics)
 
     def update(self, stage, values, golds, indices):
         for metric in self.stage2metrics[stage].values():
