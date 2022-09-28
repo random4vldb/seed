@@ -11,7 +11,6 @@ from transformers import (
 import torch
 import torch.nn.functional as F
 import evaluate
-from torch.nn import ModuleDict
 
 
 class SentSelectModule(LightningModule):
