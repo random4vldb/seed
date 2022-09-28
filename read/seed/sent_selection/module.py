@@ -10,7 +10,7 @@ from transformers import (
 )
 import torch
 import torch.nn.functional as F
-from torchmetrics import Accuracy, Precision, Recall, F1Score
+import evaluate
 from torch.nn import ModuleDict
 
 
@@ -34,28 +34,8 @@ class SentSelectModule(LightningModule):
             model_name_or_path, config=self.config, ignore_mismatched_sizes=True
         )
 
-        self.metrics = ModuleDict(
-            [
-                [
-                    "train_metrics",
-                    ModuleDict(
-                        [
-                            [metric.__class__.__name__, metric]
-                            for metric in [Accuracy(), Precision(), Recall(), F1Score()]
-                        ]
-                    ),
-                ],
-                [
-                    "val_metrics",
-                    ModuleDict(
-                        [
-                            [metric.__class__.__name__, metric]
-                            for metric in [Accuracy(), Precision(), Recall(), F1Score()]
-                        ]
-                    ),
-                ],
-            ]
-        )
+        self.metrics = {k: evaluate.load(k) for k in ["f1", "acc", "precision", "recall"]}
+
 
     def forward(self, **inputs):
         return self.model(**{k: v.long() for k, v in inputs.items()})
@@ -75,10 +55,10 @@ class SentSelectModule(LightningModule):
     def training_step_end(self, outputs):
         preds = outputs["preds"]
         labels = outputs["labels"]
-        for name, metric in self.metrics["train"].items():
+        for name, metric in self.metrics.items():
             self.log(
                 f"train_{name}",
-                metric(preds, labels),
+                metric.compute(predictions=preds, references=labels),
                 prog_bar=True,
             )
 
@@ -101,10 +81,10 @@ class SentSelectModule(LightningModule):
         preds = torch.cat([x["preds"] for x in outputs])
         labels = torch.cat([x["labels"] for x in outputs])
         self.log("val_loss", loss, prog_bar=True)
-        for name, metric in self.metrics["val_metrics"].items():
+        for name, metric in self.metrics.items():
             self.log(
                 f"val_{name}",
-                metric(preds, labels),
+                metric.compute(predictions=preds, references=labels),
                 prog_bar=True,
                 on_epoch=True,
             )
@@ -117,10 +97,15 @@ class SentSelectModule(LightningModule):
     def test_epoch_end(self, outputs):
         preds = torch.cat([x["preds"] for x in outputs])
         labels = torch.cat([x["labels"] for x in outputs])
-        for name, metric in self.metrics["test_metrics"].items():
+        for name, metric in self.metrics.items():
             self.log(
-                f"test_{name}", metric(preds, labels), prog_bar=True, on_epoch=True
+                f"test_{name}", metric.compute(predictions=preds, references=labels), prog_bar=True, on_epoch=True
             )
+
+    def predict_step(self, batch, batch_idx):
+        outputs = self(**batch)
+        preds = torch.softmax(outputs.logits, dim=1)
+        return preds
 
     def configure_optimizers(self):
         """Prepare optimizer and schedule (linear warmup and decay)"""

@@ -49,14 +49,13 @@ def main(cfg):
         batch.append(data[i])
         gold_batch.append(data[i]["label"])
 
-        if len(batch) == cfg.batch_size:
-            logger.info(f"Processing batch of size {len(batch)}")
-            result = pipeline(batch)
-            logger.info(f"Got {len(result)} predictions")
-            predictions.extend(result)
-            golds.extend(gold_batch)
-            batch = []
-            gold_batch = []
+    logger.info(f"Processing batch of size {len(batch)}")
+    result = pipeline(batch)
+    logger.info(f"Got {len(result)} predictions")
+    predictions.extend(result)
+    golds.extend(gold_batch)
+    batch = []
+    gold_batch = []
 
 
     if len(batch) > 0:

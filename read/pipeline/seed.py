@@ -33,16 +33,16 @@ class SEEDPipeline:
     def init_with_config(cfg, evaluator):
         if cfg.searcher.type == "dpr":
             return SEEDPipeline(
-                searcher=DPRSearcher(cfg.searcher.faiss_index, cfg.searcher.lucene_index, cfg.searcher.qry_encoder),
-                sent_selection=SentenceSelector(cfg.sent_selection.model, cfg.sent_selection.tokenizer),
-                verifier=TableVerifier(cfg.verifier.model, cfg.verifier.tokenizer),
+                searcher=DPRSearcher(cfg.searcher.faiss_index, cfg.searcher.lucene_index, cfg.searcher.qry_encoder, cfg),
+                sent_selection=SentenceSelector(cfg.sent_selection.model, cfg.sent_selection.tokenizer, cfg),
+                verifier=TableVerifier(cfg.verifier.model, cfg.verifier.tokenizer, cfg),
                 evaluator=evaluator
             )
         elif cfg.searcher.type == "hybrid":
             return SEEDPipeline(
-                searcher=HybridSearcher(cfg.searcher.lucene_index, cfg.searcher.qry_encoder, cfg.searcher.ctx_encoder),
-                sent_selection=SentenceSelector(cfg.sent_selection.model, cfg.sent_selection.tokenizer),
-                verifier=TableVerifier(cfg.verifier.model, cfg.verifier.tokenizer),
+                searcher=HybridSearcher(cfg.searcher.lucene_index, cfg.searcher.qry_encoder, cfg.searcher.ctx_encoder, cfg),
+                sent_selection=SentenceSelector(cfg.sent_selection.model, cfg.sent_selection.tokenizer, cfg),
+                verifier=TableVerifier(cfg.verifier.model, cfg.verifier.tokenizer, cfg),
                 evaluator=evaluator
             )
         

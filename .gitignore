@@ -14,3 +14,4 @@ pyserini_*
 poetry.lock
 .cache
 .vscode
+lightning_logs/

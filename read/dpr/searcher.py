@@ -98,9 +98,10 @@ class DPRSearcher:
 
 
 class HybridSearcher:
-    def __init__(self, lucene_index, qry_encoder_path, ctx_encoder_path):
+    def __init__(self, lucene_index, qry_encoder_path, ctx_encoder_path, cfg):
         self.searcher = LuceneSearcher(lucene_index)
         self.qry_tokenizer, self.qry_encoder, self.ctx_tokenizer, self.ctx_encoder = self._get_tokenizer_and_model(qry_encoder_path, ctx_encoder_path)
+        self.cfg = cfg
 
     def _get_tokenizer_and_model(cfg, qry_encoder_path, ctx_encoder_path):
         qry_encoder = DPRQuestionEncoder.from_pretrained(qry_encoder_path)
@@ -210,6 +211,9 @@ class HybridSearcher:
             query = example["table_page_title"] + " " + example["table_section_title"] + " " + query
             queries.append(query)
 
-        outputs, _ = self.batch_query(queries, k, include_docs=True)
+        full_outputs = []
+        for i in range(0, len(queries), self.cfg.batch_size):
+            outputs, _ = self.batch_query(queries[i:i+self.cfg.batch_size], k, include_docs=True)
+            full_outputs.extend(outputs)
 
-        return outputs 
+        return full_outputs 

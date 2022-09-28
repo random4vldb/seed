@@ -148,6 +148,11 @@ class Seed3Module(LightningModule):
                 f"test_{name}", metric(preds, labels), prog_bar=True, on_epoch=True
             )
 
+    def predict_step(self, batch, batch_idx):
+        outputs = self(**batch)
+        preds = torch.softmax(outputs.logits, dim=1)
+        return preds
+
     def configure_optimizers(self):
         """Prepare optimizer and schedule (linear warmup and decay)"""
         model = self.model
