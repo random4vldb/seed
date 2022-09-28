@@ -33,7 +33,7 @@ class SentSelectModule(LightningModule):
             model_name_or_path, config=self.config, ignore_mismatched_sizes=True
         )
 
-        self.metrics = {k: evaluate.load(k) for k in ["f1", "acc", "precision", "recall"]}
+        self.metrics = {k: evaluate.load(k) for k in ["f1", "accuracy", "precision", "recall"]}
 
 
     def forward(self, **inputs):
