@@ -28,7 +28,7 @@ def main(cfg):
         data = list(reader)
         random.seed(21)
         random.shuffle(data)
-        data = data[:100]
+        data = data
 
     logger.info(f"Loaded {len(data)} examples with {sum([x['label'] for x in data])} positives", )
 
@@ -38,7 +38,7 @@ def main(cfg):
 
 
     for i in range(len(data)):
-        data[i]["query"] = data[i]["subtable_metadata_str"]
+        data[i]["linearized_table"] = data[i]["subtable_metadata_str"]
         data[i]["title"] = data[i]["table_page_title"]
         data[i]["id"] = i
 
@@ -55,7 +55,7 @@ def main(cfg):
         result = pipeline.generate_nli_data(batch)
         predictions.extend(result)
 
-    Path(cfg.output_dir).mkdir(parents=True, exist_ok=True)
+    Path(cfg.output_file).parent.mkdir(parents=True, exist_ok=True)
 
     with jsonlines.open(Path(cfg.output_file), "w") as writer:
         for prediction in predictions:

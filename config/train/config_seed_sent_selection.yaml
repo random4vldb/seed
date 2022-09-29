@@ -6,8 +6,7 @@ defaults:
 train: False
 dev: True
 predict: True
-# ckpt_path:  /root/workspace/read/models/22-09-22-06-32-59/facebook/bart-large-mnli_epoch=5-val_loss=0.01.ckpt
-ckpt_path:  temp/seed/sent_selection/models/model.ckpt
+# ckpt_path:  temp/seed/sent_selection/models/model.ckpt
 model:
   _target_: read.seed.sent_selection.module.SentSelectModule
   model_name_or_path: facebook/bart-large-mnli

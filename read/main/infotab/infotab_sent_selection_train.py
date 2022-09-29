@@ -1,13 +1,10 @@
 import collections
 import datetime
-from distutils.command.config import config
 import json
 import os
 import random
 import re
-import time
 from pathlib import Path
-from tty import CFLAG
 
 import hydra
 import inflect
@@ -19,12 +16,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from accelerate import Accelerator
-from elasticsearch_dsl import Q
 from loguru import logger
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
-from transformers import AutoModel, AutoTokenizer, AutoModelForSequenceClassification, AutoConfig, get_linear_schedule_with_warmup
-from sklearn.metrics import classification_report
+from transformers import AutoConfig, AutoModel, AutoTokenizer
+import evaluate
 
 root = pyrootutils.setup_root(
     search_from=__file__,
@@ -332,27 +328,35 @@ def test(model, classifier, data, cfg):
     loader = DataLoader(dataset, batch_size=cfg.batch_size)
 
     model.eval()
-    correct = 0
-    total = 0
     gold_inds = []
     predictions_inds = []
+
+    accelerator = Accelerator()
+    model, classifier, loader = accelerator.prepare(model, classifier, loader)
 
     for batch_ndx, (enc, mask, seg, gold, ids) in enumerate(loader):
         # Forward-pass w/o calculating gradients
         with torch.no_grad():
             outputs = model(enc, attention_mask=mask, token_type_ids=seg)
-            # predictions = classifier(outputs[1])
+            predictions = classifier(outputs[1])
 
         # Calculate metrics
-        _, inds = torch.max(outputs.logits, 1)
-        gold_inds.extend(gold.tolist())
-        predictions_inds.extend(inds.tolist())
-        correct += inds.eq(gold.view_as(inds)).cpu().sum().item()
-        total += len(enc)
+        _, inds = torch.max(predictions, 1)
+        for metric_name, metric in metrics.items():
+            metric.add_batch(predictions=accelerator.gather_for_metrics(inds), references=accelerator.gather_for_metrics(gold))
 
-    accuracy = correct / total
+    metrics = {
+        k: evaluate.load(k) for k in ["accuracy", "f1", "precision", "recall"]
+    }
 
-    return accuracy, gold_inds, predictions_inds
+    for metric_name, metric in metrics.items():
+        accelerator.print(f"{metric_name}: {metric.compute()}")
+
+    results = {}
+
+
+
+    return gold_inds, predictions_inds
 
 
 def train_data(train_data, dev_data, test_data, cfg):
@@ -382,7 +386,7 @@ def train_data(train_data, dev_data, test_data, cfg):
     # Intialize Models
     config = AutoConfig.from_pretrained(cfg.model_type)
     print(config.num_labels)
-    model = AutoModelForSequenceClassification.from_pretrained(cfg.model_type)
+    model = AutoModel.from_pretrained(cfg.model_type)
     embed_size = model.config.hidden_size
     classifier = FeedForward(
         embed_size, int(embed_size / 2), cfg.num_labels
@@ -397,14 +401,8 @@ def train_data(train_data, dev_data, test_data, cfg):
 
     # Intialize the optimizer and loss functions
     params = list(model.parameters())
-    optimizer = optim.Adagrad(params, lr=0.0005)
-    num_training_steps = len(loader) * cfg.epochs
-    scheduler = get_linear_schedule_with_warmup(
-            optimizer,
-            num_warmup_steps=500,
-            num_training_steps=num_training_steps,
-        )
-
+    optimizer = optim.Adagrad(params, lr=0.0001)
+    loss_fn = nn.CrossEntropyLoss()
     model, optimizer, loader = accelerator.prepare(model, optimizer, loader)
     model.train()
 
@@ -413,7 +411,6 @@ def train_data(train_data, dev_data, test_data, cfg):
 
     for ep in range(cfg.epochs):
         epoch_loss = 0
-        start = time.time()
         # Iterate over batches
 
         for batch_ndx, (enc, mask, seg, gold, ids) in enumerate(tqdm(loader)):
@@ -421,48 +418,42 @@ def train_data(train_data, dev_data, test_data, cfg):
 
             optimizer.zero_grad()
             # Forward-pass
-            outputs = model(enc, attention_mask=mask, token_type_ids=seg, labels=gold)
-            loss = outputs.loss / gradient_accumulation_steps
+            outputs = model(enc, attention_mask=mask, token_type_ids=seg)
+            predictions = classifier(outputs[1])
+
+            loss = loss_fn(predictions, gold)
 
             accelerator.backward(loss)
 
             if (batch_ndx + 1) % gradient_accumulation_steps == 0:
-                scheduler.step()
                 optimizer.step()
 
             batch_loss += loss.item()
             epoch_loss += batch_loss
 
         normalized_epoch_loss = epoch_loss / (len(loader))
-        print("Epoch {}".format(ep + 1))
-        print("Epoch loss: {} ".format(normalized_epoch_loss))
 
         # Evaluate on the dev and test sets
-        dev_acc, dev_gold, dev_pred = test(model, classifier, dev_data, cfg)
-        test_acc, test_gold, test_pred = test(model, classifier, test_data, cfg)
-        end = time.time()
-        print("Dev Accuracy: {}".format(dev_acc))
-        print("Time taken: {} seconds\n".format(end - start))
+        accelerator.print("Evaluating on dev set")
+        test(model, classifier, dev_data, cfg)
+
+        accelerator.print("Evaluating on test set")
+        test(model, classifier, test_data, cfg)
         # Save model
+        unwrapped_model = accelerator.unwrap_model(model)
+        
         torch.save(
             {
                 "epoch": ep + 1,
-                "model_state_dict": model.state_dict(),
+                "model_state_dict": unwrapped_model.state_dict(),
                 "classifier_state_dict": classifier.state_dict(),
                 "loss": normalized_epoch_loss,
-                "dev_accuracy": dev_acc,
             },
             os.path.join(cfg.output_dir, "model_"
             + str(ep + 1)
-            + "_"
-            + str(dev_acc))
         )
-        json.dump({"epoch": ep + 1,"loss": normalized_epoch_loss, "dev_accuracy": dev_acc, "dev_gold": dev_gold, "dev_pred": dev_pred, 
-        "test_accuracy": test_acc, "test_gold": test_gold, "test_pred": test_pred}, (Path(cfg.output_dir) / f"model_{ep + 1}.json").open("w"))
-        logger.info({"epoch": ep + 1,"loss": normalized_epoch_loss, "dev_accuracy": dev_acc, "test_accuracy": test_acc})
-
-        logger.info(f"Dev report: {classification_report(dev_gold, dev_pred, output_dict=True)}")
-        logger.info(f"Test report: {classification_report(test_gold, test_pred, output_dict=True)}")
+    )
+        
 
 
 def test_data(data, cfg):
@@ -472,21 +463,32 @@ def test_data(data, cfg):
     args - dict. Arguments passed via CLI
     """
     # Intialize model
+    accelerator = Accelerator()
     model = AutoModel.from_pretrained(cfg.model_type).cuda()
     embed_size = model.config.hidden_size
     classifier = FeedForward(embed_size, int(embed_size / 2), cfg.num_labels).cuda()
 
+
     # Load pre-trained models
     checkpoint = torch.load(os.path.join(cfg.output_dir, cfg.model_name))
+    
     model.load_state_dict(checkpoint["model_state_dict"])
     classifier.load_state_dict(checkpoint["classifier_state_dict"])
 
     # Evaluate over splits
 
     # Compute Accuracy
-    acc, gold, pred = test(model, classifier, data)
+    acc, gold, pred = test(model, classifier, data, cfg)
 
     results = {"accuracy": acc, "gold": gold, "pred": pred}
+
+    metrics = {
+        k: evaluate.load(k) for k in ["accuracy", "f1", "precision", "recall"]
+    }
+
+    for metric_name, metric in metrics.items():
+        results[metric_name] = metric.compute(predictions=gold, references=pred)
+        logger.info(f"{metric_name}: {results[metric_name]}")
 
     return results
 
@@ -518,7 +520,6 @@ def read_infotab_file(file):
 )
 def main(cfg):
     # local_rank = torch.distributed.get_rank()
-
     if Path(cfg.cache_dir).exists() and (Path(cfg.cache_dir) / "train.json").exists() and cfg.cached:
         train_dataset = json.load((Path(cfg.cache_dir) / "train.json").open())
         if cfg.get("train_size", -1) != -1:
@@ -543,7 +544,11 @@ def main(cfg):
         json.dump(train_dataset, (Path(cfg.cache_dir) / "train.json").open("w"))
         json.dump(dev_dataset, (Path(cfg.cache_dir) / "dev.json").open("w"))
     logger.info("Training")
-    train_data(train_dataset, train_dataset, dev_dataset, cfg)
+    if cfg.get("train"):
+        train_data(train_dataset, train_dataset, dev_dataset, cfg)
+    if cfg.get("eval"):
+        logger.info("Testing")
+        test_data(dev_dataset, cfg)
 
 
 if __name__ == "__main__":

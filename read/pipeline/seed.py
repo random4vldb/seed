@@ -137,11 +137,9 @@ class SEEDPipeline:
                             continue                   
                         table_with_sent.append((example["linearized_table"], sent, i))
         
-        selected_mask = self.sent_selection(*zip(*table_with_sent))
         result = []
         for i, (table, sent, idx) in enumerate(table_with_sent):
-            if selected_mask[i]:
-                result.append({"table": examples[idx]["table"], "sentence": sent, "id": examples[idx]["id"], "title": examples[idx]["title"], "label": 0})
+            result.append({"table": examples[idx]["table"], "sentence": sent, "id": examples[idx]["id"], "title": examples[idx]["title"], "label": 0})
 
         return result
 

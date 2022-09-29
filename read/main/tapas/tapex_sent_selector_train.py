@@ -12,7 +12,8 @@ from transformers import (
     TrainingArguments,
 )
 from loguru import logger
-import torch
+import evaluate 
+import numpy as np
 
 root = pyrootutils.setup_root(
     search_from=__file__,
@@ -95,17 +96,18 @@ def main(cfg):
     )
 
     name2metric = {
-        "accuracy": torchmetrics.Accuracy(),
-        "f1": torchmetrics.F1Score(),
-        "precision": torchmetrics.Precision(),
-        "recall": torchmetrics.Recall(),
+        "accuracy": evaluate.load("accuracy"),
+        "f1": evaluate.load("f1"),
+        "precision": evaluate.load("precision"),
+        "recall": evaluate.load("recall"),
     }
 
     def compute_metrics(eval_pred):
         predictions, labels = eval_pred
-        predictions = predictions[0][:, 1]
+        predictions = np.argmax(predictions[0])
+        print(predictions, labels)
         for name, metric in name2metric.items():
-            metric(torch.tensor(predictions), torch.tensor(labels))
+            metric.add_batch(predictions=predictions, references=labels)
         return {name: metric.compute() for name, metric in name2metric.items()}
 
     args = TrainingArguments(
@@ -125,18 +127,22 @@ def main(cfg):
         eval_dataset=datasets["dev"],
         compute_metrics=compute_metrics,
     )
+    if cfg.get("train"):
+        trainer.train()
 
-    trainer.train()
 
-    for name, metric in name2metric.items():
-        logger.info(f"{name}: {metric.compute()}")
-        metric.reset()
+        for name, metric in name2metric.items():
+            logger.info(f"{name}: {metric.compute()}")
+            metric.reset()
+    if cfg.get("dev"):
 
-    trainer.evaluate()
+        trainer.evaluate()
 
-    for name, metric in name2metric.items():
-        logger.info(f"{name}: {metric.compute()}")
-        metric.reset()
+        model = model.from_pretrained(cfg.output_dir)
+
+        for name, metric in name2metric.items():
+            logger.info(f"{name}: {metric.compute()}")
+            metric.reset()
 
 
 if __name__ == "__main__":

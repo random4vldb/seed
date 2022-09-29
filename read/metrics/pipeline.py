@@ -1,13 +1,13 @@
 import collections
 from loguru import logger
 from torchmetrics import (
-    Accuracy,
-    F1Score,
-    Precision,
-    Recall,
     RetrievalHitRate,
     RetrievalPrecision,
     RetrievalRecall,
+    Precision,
+    Recall,
+    F1Score,
+    Accuracy
 )
 import torch
 
@@ -26,10 +26,10 @@ class PipelineEvaluator:
         for stage in [PipelineModule.DOCUMENT_RETRIEVAL, PipelineModule.SENTENCE_SELECTION, PipelineModule.TABLE_VERIFICATION]:
             if stage == PipelineModule.DOCUMENT_RETRIEVAL:
                 for metric in [RetrievalPrecision, RetrievalRecall, RetrievalHitRate]:
-                    self.stage2metrics[stage][metric.__class__.__name__] = metric(k=10)
+                    self.stage2metrics[stage][metric.__name__] = metric(k=10)
             else:
                 for metric in [Accuracy, F1Score, Precision, Recall]:
-                    self.stage2metrics[stage][metric.__class__.__name__] = metric()
+                    self.stage2metrics[stage][metric.__name__] = metric(num_classes=2)
         print(self.stage2metrics)
 
     def update(self, stage, values, golds, indices):
@@ -42,5 +42,6 @@ class PipelineEvaluator:
     def report(self):
         for stage, metrics in self.stage2metrics.items():
             for metric, value in metrics.items():
+                logger
                 logger.info(f"{stage} {metric}: {value.compute()}")
             
