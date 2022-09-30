@@ -1,33 +1,67 @@
-from collections import defaultdict
 from ..seed import SEEDPipeline
 from transformers import TapasForSequenceClassification, TapasTokenizer
+import torch
+import pandas as pd
+from loguru import logger
+
 
 class TapasPipeline(SEEDPipeline):
     def __init__(self, cfg):
-        self.sent_selector = TapasForSequenceClassification.from_pretrained(cfg.sent_selector.model_name_or_path)
-        self.sent_tokenizer = TapasTokenizer.from_pretrained(cfg.sent_selector.tokenizer)
-        self.verifier = TapasForSequenceClassification.from_pretrained(cfg.verifier.model_name_or_path)
-        self.verifier_tokenizer = TapasTokenizer.from_pretrained(cfg.verifier.tokenizer)
+        self.sent_selector = TapasForSequenceClassification.from_pretrained(
+            "google/tapas-base"
+        )
+        self.sent_selector.load_state_dict(torch.load(cfg.sent_selection.model))
+        self.sent_tokenizer = TapasTokenizer.from_pretrained(
+            cfg.sent_selection.tokenizer
+        )
 
+        self.verifier = TapasForSequenceClassification.from_pretrained(
+            "google/tapas-base"
+        )
+        self.verifier_tokenizer = TapasTokenizer.from_pretrained(cfg.verifier.tokenizer)
+        self.verifier.load_state_dict(torch.load(cfg.verifier.model))
+
+        self.cfg = cfg
+
+    def process_one_batch(self, inputs):
+        print(inputs["input_ids"].unsqueeze(0).shape)
+        outputs = self.sent_selector(
+            torch.cat([x["input_ids"].unsqueeze(0) for x in inputs]),
+            torch.cat([x["attention_mask"].unsqueeze(0) for x in inputs]),
+            torch.cat([x["token_type_ids"].unsqueeze(0) for x in inputs]),
+        )
+        return outputs.logits.argmax(dim=1).detach().cpu().numpy().tolist()
 
     def predict(self, examples):
-        inputs = self.sent_tokenizer(examples["table"], examples["sentence"], return_tensors="pt", padding=True, truncation=True)
+        tables = [pd.DataFrame(x["table"]) for x in examples]
+        input_batch = []
+        all_outputs = []
+        for i, table in enumerate(tables):
+            input_ = self.sent_tokenizer(
+                table,
+                [x["sentence"] for x in examples],
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+            )
 
-        outputs = self.sent_selector(**inputs)
+            input_batch.append(input_)
+            if len(input_batch) == self.cfg.batch_size:
+                outputs = self.process_one_batch(input_batch)
+                input_batch = []
 
-        selected_examples = defaultdict(list)
-        sent2verification = {}
-        for i, pred in enumerate(outputs.logits.argmax(dim=1).detach().cpu().numpy().tolist()):
-            if pred == 1:
-                sent2verification[i] = len(sent2verification)
-                selected_examples["table"].append(examples["table"][i])
-                selected_examples["sentence"].append(examples["sentence"][i])
-        
+                all_outputs.extend(outputs)
+                logger.info("Processed {} examples", len(all_outputs))
+
         result = [False] * len(examples)
-        if len(selected_examples) != 0:
-            inputs = self.verifier_tokenizer(selected_examples["table"], selected_examples["sentence"], return_tensors="pt", padding=True, truncation=True)
-            outputs = self.verifier(**inputs)
-            for sent_idx, verification_idx in sent2verification.items():
-                result[sent_idx] = outputs.logits[verification_idx].argmax(dim=0).detach().cpu().numpy().tolist() == 1
+        input_batch = []
+        for i, output in enumerate(all_outputs):
+            if output == 1:
+                output = self.verifier(**input_batch)
+                result[i] = (
+                    output.logits.argmax(dim=1).detach().cpu().numpy().tolist()[0] == 1
+                )
 
-        return [{"id": examples[i]["id"], "label": result[i]} for i in range(len(examples))]
+        return [
+            {"id": examples[i]["id"], "label": result[i]} for i in range(len(examples))
+        ]

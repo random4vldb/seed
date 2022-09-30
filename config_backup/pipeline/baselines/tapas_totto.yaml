@@ -1,0 +1,15 @@
+input_file: data/totto2/augmented/dev.jsonl
+batch_size: 16
+devices: 0,1,2,3
+searcher:
+  type: hybrid
+  faiss_index: pyserini_faiss_full
+  lucene_index: temp/pyserini_index
+  qry_encoder: temp/dpr/models/qry_encoder_dpr
+  ctx_encoder: temp/dpr/models/ctx_encoder_dpr
+sent_selection:
+  model: temp/tapas/sent_selection/models/model.pkl
+  tokenizer: google/tapas-base
+verifier:
+  model: temp/tapas/verification/models/model.pkl
+  tokenizer: google/tapas-base

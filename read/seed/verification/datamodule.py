@@ -1,9 +1,11 @@
 import datasets
-from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
+from tango.integrations.pytorch_lightning import LightningDataModule
 
+
+@LightningDataModule.register("seed_verification_data")
 class Seed3DataModule(LightningDataModule):
     def __init__(
         self,

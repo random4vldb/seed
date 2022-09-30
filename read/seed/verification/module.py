@@ -1,19 +1,18 @@
+import evaluate
 import torch
-from pytorch_lightning import (
-    LightningModule,
-)
+import torch.nn.functional as F
+from tango.integrations.pytorch_lightning import LightningModule
+from torch.nn import ModuleDict
+from torchmetrics import Accuracy, F1Score, Precision, Recall
 from transformers import (
     AdamW,
     AutoConfig,
     AutoModelForSequenceClassification,
     get_linear_schedule_with_warmup,
 )
-from torchmetrics import Accuracy, Precision, Recall, F1Score
-import torch
-import torch.nn.functional as F
-from torch.nn import ModuleDict
-import evaluate
 
+
+@LightningModule.register("verification")
 
 class Seed3Module(LightningModule):
     def __init__(

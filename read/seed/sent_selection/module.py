@@ -12,8 +12,10 @@ import torch
 import torch.nn.functional as F
 from torchmetrics import Accuracy, Precision, Recall, F1Score
 from torch.nn import ModuleDict
+from tango.integrations.pytorch_lightning import LightningModule
 
 
+@LightningModule.register("seed_sent_selection")
 class SentSelectModule(LightningModule):
     def __init__(
         self,
