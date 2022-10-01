@@ -13,6 +13,9 @@
                 pretrained_model_name_or_path: "google/tapas-large",
             },
         },
+        eval: {
+            
+        },
     },
 
 },

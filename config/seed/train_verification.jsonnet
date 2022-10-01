@@ -1,3 +1,5 @@
+local lib = import "trainer.libsonnet";
+
 {
     "steps": {
         "train_sent_selection": {
@@ -6,23 +8,13 @@
                 "type": "seed_verification",
                 "model_name_or_path": "facebook/bart-large"
             },
-            "trainer": {
-                "type": "default",
-                "max_epochs": 5,
-                "log_every_n_steps": 3,
-                "logger": [
-                    {"type": "pytorch_lightning::TensorBoardLogger"},
-                    {"type": "pytorch_lightning::CSVLogger"},
-                ],
-                "accelerator": "gpu",
-                "profiler": {
-                    "type": "pytorch_lightning::SimpleProfiler",
-                },
-            },
+            "trainer": lib.trainer("seed_sent_selection"),
             "datamodule":{
                 "type": "seed_sent_selection_data",
                 "tokenizer": "facebook/bart-large",
-                "dataset_name_or_path": "temp/seed/sent_selection/data"
+                "dataset_name_or_path": "temp/seed/sent_selection/data",
+                "train_batch_size": 16,
+                "eval_batch_size": 16
             }
         }
     }

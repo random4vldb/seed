@@ -1,5 +1,5 @@
 {
-    "trainer": {
+    trainer(name="model", profiling=false) :: {
                 "type": "default",
                 "max_epochs": 5,
                 "log_every_n_steps": 3,
@@ -9,8 +9,11 @@
                 ],
                 "callbacks": [
                     {
-                        "type": "pytorch_lightning::ModelCheckpoint",
-                        "monitor": "val_loss"
+                        type: "pytorch_lightning::ModelCheckpoint",
+                        monitor: "val_loss",
+                        save_top_k: 1,
+                        dirpath: "models",
+                        filename: name + "-{epoch:02d}-{val_loss:.2f}"
                     },
                     {
                         "type": "pytorch_lightning::EarlyStopping",
@@ -20,10 +23,10 @@
                         "type": "pytorch_lightning::RichProgressBar"
                     }
                 ],
-                "accelerator": "gpu",
-                "profiler": {
+                profiler: if profiling then {
                     "type": "pytorch_lightning::SimpleProfiler",
-                },
-                strategy: "ddp"
+                } else null,
+                accelerator: "gpu",
+                strategy: "ddp_spawn"
             }
 }
