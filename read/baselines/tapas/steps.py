@@ -48,7 +48,7 @@ class TableDataset(torch.utils.data.Dataset):
 
 
 @Step.register("tapas_input_data")
-class GenerateData(Step):
+class TapasInputData(Step):
     DETERMINISTIC = True
     CACHEABLE = False
 
