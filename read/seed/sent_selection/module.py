@@ -1,18 +1,15 @@
 import torch
-from pytorch_lightning import (
-    LightningModule,
-)
+import torch.nn.functional as F
+from pytorch_lightning import LightningModule
+from tango.integrations.pytorch_lightning import LightningModule
+from torch.nn import ModuleDict
+from torchmetrics import Accuracy, F1Score, Precision, Recall
 from transformers import (
     AdamW,
     AutoConfig,
     AutoModelForSequenceClassification,
     get_linear_schedule_with_warmup,
 )
-import torch
-import torch.nn.functional as F
-from torchmetrics import Accuracy, Precision, Recall, F1Score
-from torch.nn import ModuleDict
-from tango.integrations.pytorch_lightning import LightningModule
 
 
 @LightningModule.register("seed_sent_selection")
@@ -99,7 +96,7 @@ class SentSelectModule(LightningModule):
         }
 
     def validation_epoch_end(self, outputs):
-        loss = torch.cat([x["loss"] for x in outputs]).mean()
+        loss = torch.stack([x["loss"] for x in outputs]).mean()
         preds = torch.cat([x["preds"] for x in outputs])
         labels = torch.cat([x["labels"] for x in outputs])
         self.log("val_loss", loss, prog_bar=True)
@@ -109,6 +106,7 @@ class SentSelectModule(LightningModule):
                 metric(preds, labels),
                 prog_bar=True,
                 on_epoch=True,
+                sync_dist=True,
             )
 
     def test_step(self, batch, batch_idx, dataloader_idx=0):
@@ -121,7 +119,11 @@ class SentSelectModule(LightningModule):
         labels = torch.cat([x["labels"] for x in outputs])
         for name, metric in self.metrics["test_metrics"].items():
             self.log(
-                f"test_{name}", metric(preds, labels), prog_bar=True, on_epoch=True
+                f"test_{name}",
+                metric(preds, labels),
+                prog_bar=True,
+                on_epoch=True,
+                sync_dist=True,
             )
 
     def configure_optimizers(self):
