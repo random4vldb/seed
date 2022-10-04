@@ -28,7 +28,7 @@ class TableDataset(torch.utils.data.Dataset):
                 max_length=512,
                 return_tensors="pt",
             )
-            encoding["label"] = torch.tensor([1])
+            encoding["labels"] = torch.tensor([1])
         else:
             encoding = self.tokenizer(
                 table=sub_table,
@@ -38,7 +38,7 @@ class TableDataset(torch.utils.data.Dataset):
                 max_length=512,
                 return_tensors="pt",
             )
-            encoding["label"] = torch.tensor([0])
+            encoding["labels"] = torch.tensor([0])
 
         encoding = {key: val[-1] for key, val in encoding.items()}
         return encoding
@@ -49,11 +49,11 @@ class TableDataset(torch.utils.data.Dataset):
 
 @Step.register("tapas_input_data")
 class TapasInputData(Step):
-    DETERMINISTIC = True
+    DETERMINISTIC = False
     CACHEABLE = False
 
     def run(self, tokenizer, train_file, dev_file) -> DatasetDict:
-        tokenizer = TapasTokenizer.from_pretrained(tokenizer)
+        tokenizer = TapasTokenizer.from_pretrained(tokenizer, max_question_length=256)
         torch.manual_seed(1)
         train_df = pd.read_json(train_file, lines=True)
         dev_df = pd.read_json(dev_file, lines=True)

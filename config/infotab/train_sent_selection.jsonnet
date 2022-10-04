@@ -1,7 +1,6 @@
 local splits = [
     "train",
     "dev",
-    "test",
 ];
 
 local split_steps = std.foldl(
@@ -50,7 +49,7 @@ local split_steps = std.foldl(
                 type: "ref",
                 ref: "preprocess_dev",
             },
-            batch_size: 16,
+            batch_size: 4,
             num_epochs: 10,
             output_dir: "temp/infotab/sent_selection/models",
         },

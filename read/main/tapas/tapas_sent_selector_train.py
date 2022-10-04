@@ -49,7 +49,7 @@ class TableDataset(torch.utils.data.Dataset):
                 max_length=512,
                 return_tensors="pt",
             )
-            encoding["label"] = torch.tensor([1])
+            encoding["labels"] = torch.tensor([1])
         else:
             encoding = self.tokenizer(
                 table=sub_table,
@@ -59,7 +59,7 @@ class TableDataset(torch.utils.data.Dataset):
                 max_length=512,
                 return_tensors="pt",
             )
-            encoding["label"] = torch.tensor([0])
+            encoding["labels"] = torch.tensor([0])
 
         encoding = {key: val[-1] for key, val in encoding.items()}
         return encoding

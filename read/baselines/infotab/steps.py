@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 from accelerate import Accelerator
 from loguru import logger
-from tango import JsonFormat, Step
+from tango import JsonFormat, Step, Format, TorchFormat
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 from transformers import AutoConfig, AutoModel, AutoTokenizer
@@ -249,8 +249,9 @@ class InfoTabPreprocess(Step):
 
 @Step.register("infotab_train")
 class InfoTabTrain(Step):
-    DETERMINISTIC: bool = True
-    CACHEABLE = True
+    DETERMINISTIC: bool = False
+    CACHEABLE = False
+    FORMAT: Format = JsonFormat()
 
     def run(self, train_data, dev_data, test_data, model_name_or_path, batch_size, num_epochs, output_dir):
         """Train the transformer model on given data
@@ -344,7 +345,7 @@ class InfoTabTrain(Step):
             self.test(model, classifier, test_data, batch_size)
 
         unwrapped_model = accelerator.unwrap_model(model)
-        return unwrapped_model, classifier
+        return {"model": unwrapped_model, "classifier": classifier}
 
     def test(self, model, classifier, data, batch_size):
         # Separate the data fields in the evaluation data
