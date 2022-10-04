@@ -2,7 +2,7 @@ import pyrootutils
 from typing import List
 from kilt.knowledge_source import KnowledgeSource
 from blingfire import text_to_sentences
-
+from typing import Optional
 from read.seed.verification.verifier import TableVerifier
 
 
@@ -19,6 +19,118 @@ root = pyrootutils.setup_root(
 from read.dpr.searcher import DPRSearcher, HybridSearcher
 from read.seed.sent_selection import SentenceSelector
 from read.metrics.pipeline import PipelineModule
+from tango import Step, JsonFormat, Format
+
+@Step.register("seed_document_retrieval")
+class DocumentRetrieval(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = JsonFormat()
+
+    @staticmethod
+    def init_searcher(searcher, faiss_index, lucene_index, qry_encoder, ctx_encoder):
+        if searcher == "dpr":
+            searcher=DPRSearcher(faiss_index, lucene_index, qry_encoder)
+        elif searcher == "hybrid":
+            searcher=HybridSearcher(lucene_index, qry_encoder, ctx_encoder)
+
+    def run(self, data: List[dict], searcher, faiss_index, lucene_index, qry_encoder, ctx_encoder, batch_size) -> List[bool]:
+        searcher = self.init_searcher(searcher, faiss_index, lucene_index, qry_encoder, ctx_encoder)
+
+        hits_per_query = []
+        batch = []
+        
+        for example in data: 
+            batch.append(example)
+            if len(batch) == batch_size:
+                hits_per_query += searcher.search(batch, k=10)
+                batch = []
+
+        doc_results = []
+
+        for i, (example, hits) in enumerate(zip(data, hits_per_query)):
+            doc_result = []
+            ids = set()
+            for hit in hits:
+                id = hit["id"].split("::")[0]
+
+                if id in ids:
+                    continue
+                else:
+                    ids.add(id)
+
+                page = self.ks.get_page_by_id(id)
+                if page is None:
+                    continue
+                for passage in page["text"]:
+                    if "::::" in passage:
+                        continue
+                    for sent in text_to_sentences(passage).split("\n"):
+                        if len(sent.split()) <= 4: # Short sentences are mostly section titles. 
+                            continue                   
+                        doc_result.append((sent, hit["score"]))
+            doc_results.append(doc_result)
+        return doc_results
+
+
+@Step.register("seed_sentence_selection")
+class SenteceSelection(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = JsonFormat()
+
+    def run(self, model, tokenizer, data, doc_results: List[List[str]]) -> List[bool]:
+        sent_selection = SentenceSelector(model, tokenizer)
+
+        sentence_results = []
+        for i, (example, doc_result) in enumerate(zip(data, doc_results)):
+            batch = []
+            selected_sents = []
+            for sent, score in doc_result:
+                batch.append((example, sent))
+                selected_mask = sent_selection(*zip(*batch))
+                for example, selected in zip(batch, selected_mask):
+                    if selected:
+                        selected_sents.append(sent)
+                sentence_results.append(selected_sents)
+        return sentence_results
+
+
+@Step.register("seed_table_verification")
+class TableVerification(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = JsonFormat()
+
+    def run(self,model, tokenizer, data, sentence_results: List[List[str]]) -> List[bool]:
+        verifier=TableVerifier(model, tokenizer)
+
+        verified_results = []
+        for i, (example, result) in enumerate(zip(data, sentence_results)):
+            verified_result = []
+            for sent in result:
+                if verifier.verify(sent, example["table"]):
+                    verified_result.append(True)
+                    break
+            else:
+                verified_result.append(False)
+        return verified_results
+
+
+@Step.register("seed_error_correction")
+class ErrorCorrection(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = JsonFormat()
+
+    def run(self, examples, sentence_results: List[List[str]]) -> List[bool]:
+        corrected_results = []
+        for i, (example, result) in enumerate(zip(examples, sentence_results)):
+            corrected_result = []
+            for sent in result:
+                corrected_result.append(self.verifier.correct(sent, example["table"]))
+        return corrected_results
+
 
 
 class SEEDPipeline:

@@ -264,6 +264,7 @@ class InfoTabTrain(Step):
         if not os.path.isdir(output_dir):
             os.mkdir(output_dir)
 
+
         print("{} train data loaded".format(len(train_data["encodings"])))
         print("{} dev data loaded".format(len(dev_data["encodings"])))
         print("{} test data loaded".format(len(test_data["encodings"])))
@@ -279,7 +280,7 @@ class InfoTabTrain(Step):
 
         # Intialize Models
         config = AutoConfig.from_pretrained(model_name_or_path)
-        model = AutoModel.from_pretrained()
+        model = AutoModel.from_pretrained(model_name_or_path)
         embed_size = model.config.hidden_size
         classifier = FeedForward(embed_size, int(embed_size / 2), 2).cuda()
 
@@ -325,7 +326,7 @@ class InfoTabTrain(Step):
             # Evaluate on the dev and test sets
             if dev_data:
                 accelerator.print("Evaluating on dev set")
-                self.test(model, classifier, dev_data, cfg)
+                self.test(model, classifier, dev_data, batch_size)
 
             # Save model
             unwrapped_model = accelerator.unwrap_model(model)
@@ -365,6 +366,9 @@ class InfoTabTrain(Step):
 
         accelerator = Accelerator()
         model, classifier, loader = accelerator.prepare(model, classifier, loader)
+        metrics = {
+            k: evaluate.load(k) for k in ["accuracy", "f1", "precision", "recall"]
+        }
 
         for batch_ndx, (enc, mask, seg, gold, ids) in enumerate(loader):
             with torch.no_grad():
@@ -379,9 +383,7 @@ class InfoTabTrain(Step):
                     references=accelerator.gather_for_metrics(gold),
                 )
 
-        metrics = {
-            k: evaluate.load(k) for k in ["accuracy", "f1", "precision", "recall"]
-        }
+
 
         for metric_name, metric in metrics.items():
             accelerator.print(f"{metric_name}: {metric.compute()}")
