@@ -13,12 +13,13 @@ import torch.nn as nn
 import torch.optim as optim
 from accelerate import Accelerator
 from loguru import logger
-from tango import JsonFormat, Step, Format, TorchFormat
+from tango import JsonFormat, Step, Format
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 from transformers import AutoConfig, AutoModel, AutoTokenizer
 from .classifier import FeedForward
 from .helpers import *
+from pathlib import Path
 
 
 root = pyrootutils.setup_root(
@@ -446,4 +447,46 @@ class InfoTabInputData(Step):
                 idx += 1
                 examples.append(example)
         logger.info("Num examples", len(examples))
+        print()
         return examples
+
+
+@Step.register("infotab_convert_from_totto")
+class InfoTabConvertFromTotto(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE = False
+    VERSION = "002"
+
+    def run(self, file):
+        examples = []
+        idx = 0
+        with jsonlines.open(file) as reader:
+            for obj in reader:
+                examples.append(
+                    {
+                        "table_id": idx,
+                        "annotator_id": idx,
+                        "hypothesis": obj["sentence"],
+                        "label": 1,
+                        "table": obj["positive_table"],
+                        "title": obj["title"],
+                        "highlighted_cells": obj["highlighted_cells"],
+                    }
+                )
+                negative_table = pd.DataFrame(json.loads(obj["negative_table"]))
+                replacing_value, replaced_value, row, column = json.loads(obj["note"])
+                negative_table.iloc[row, column] = replacing_value
+                examples.append(
+                    {
+                        "table_id": idx + 1,
+                        "annotator_id": idx + 1,
+                        "hypothesis": obj["sentence"],
+                        "label": 0,
+                        "table": negative_table.to_json(orient="records"),
+                        "title": obj["title"],
+                        "highlighted_cells": obj["highlighted_cells"],
+                    }
+                )
+            idx += 2
+        return examples
+

@@ -6,8 +6,8 @@ local splits = [
 local split_steps = std.foldl(
     function(x, split) x + {
         ["input_data_" + split]: {
-            type: "infotab_input_data",
-            file: "temp/infotab/verification/data/" + split + ".jsonl",
+            type: "infotab_convert_from_totto",
+            file: "data/totto2/triplets/" + split + ".jsonl",
         },
         ["json_to_para_" + split]: {
             type: "infotab_json_to_para",

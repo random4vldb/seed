@@ -12,7 +12,7 @@ from transformers import (
 )
 
 
-@LightningModule.register("verification")
+@LightningModule.register("seed_verification")
 
 class Seed3Module(LightningModule):
     def __init__(
@@ -35,7 +35,7 @@ class Seed3Module(LightningModule):
         )
 
         self.metrics = {
-            "train": {
+            "train_metrics": {
                 "accuracy": evaluate.load("accuracy"),
                 "precision": evaluate.load("precision"),
                 "recall": evaluate.load("recall"),
@@ -47,39 +47,13 @@ class Seed3Module(LightningModule):
                 "recall": evaluate.load("recall"),
                 "f1": evaluate.load("f1"),
             },
+            "test_metrics": {
+                "accuracy": evaluate.load("accuracy"),
+                "precision": evaluate.load("precision"),
+                "recall": evaluate.load("recall"),
+                "f1": evaluate.load("f1"),
+            },
         }
-
-        self.metrics = ModuleDict(
-            [
-                [
-                    "train_metrics",
-                    ModuleDict(
-                        [
-                            [metric.__class__.__name__, metric]
-                            for metric in [Accuracy(), Precision(), Recall(), F1Score()]
-                        ]
-                    ),
-                ],
-                [
-                    "val_metrics",
-                    ModuleDict(
-                        [
-                            [metric.__class__.__name__, metric]
-                            for metric in [Accuracy(), Precision(), Recall(), F1Score()]
-                        ]
-                    ),
-                ],
-                [
-                    "test_metrics",
-                    ModuleDict(
-                        [
-                            [metric.__class__.__name__, metric]
-                            for metric in [Accuracy(), Precision(), Recall(), F1Score()]
-                        ]
-                    ),
-                ],
-            ]
-        )
 
     def forward(self, **inputs):
         return self.model(**{k: v.long() for k, v in inputs.items()})
@@ -99,13 +73,6 @@ class Seed3Module(LightningModule):
     def training_step_end(self, outputs):
         preds = outputs["preds"]
         labels = outputs["labels"]
-        for name, metric in self.metrics["train"].items():
-            self.log(
-                f"train_{name}",
-                metric(preds, labels),
-                prog_bar=True,
-            )
-
         return outputs["loss"].sum()
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
@@ -122,14 +89,14 @@ class Seed3Module(LightningModule):
 
 
     def validation_epoch_end(self, outputs):
-        loss = torch.cat([x["loss"] for x in outputs]).mean()
+        loss = torch.stack([x["loss"] for x in outputs]).mean()
         preds = torch.cat([x["preds"] for x in outputs])
         labels = torch.cat([x["labels"] for x in outputs])
         self.log("val_loss", loss, prog_bar=True)
         for name, metric in self.metrics["val_metrics"].items():
             self.log(
                 f"val_{name}",
-                metric(preds, labels),
+                metric.compute(predictions=preds, references=labels),
                 prog_bar=True,
                 on_epoch=True,
             )
@@ -144,7 +111,7 @@ class Seed3Module(LightningModule):
         labels = torch.cat([x["labels"] for x in outputs])
         for name, metric in self.metrics["test_metrics"].items():
             self.log(
-                f"test_{name}", metric(preds, labels), prog_bar=True, on_epoch=True
+                f"test_{name}", metric.compute(predictions=preds, references=labels), prog_bar=True, on_epoch=True
             )
 
     def predict_step(self, batch, batch_idx):

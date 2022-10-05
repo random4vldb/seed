@@ -1,7 +1,6 @@
 {
     trainer(name="model", profiling=false) :: {
                 "type": "default",
-                "max_epochs": 5,
                 "log_every_n_steps": 3,
                 "logger": [
                     {"type": "pytorch_lightning::TensorBoardLogger"},

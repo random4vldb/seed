@@ -2,6 +2,8 @@ import hydra
 import pyrootutils
 import jsonlines
 from pathlib import Path
+import pandas as pd
+import json
 
 
 root = pyrootutils.setup_root(
@@ -35,11 +37,14 @@ def main(cfg):
                         "highlighted_cells": obj["highlighted_cells"],
                     }
                 )
+                negative_table = pd.DataFrame(json.loads(obj["negative_table"]))
+                replacing_value, replaced_value, row, column = obj["note"]
+                negative_table.iloc[row, column] = replacing_value
                 examples.append(
                     {
                         "sentence": obj["sentence"],
                         "label": 0,
-                        "table": obj["negative_table"],
+                        "table": negative_table.to_json(orient="records"),
                         "title": obj["title"],
                         "highlighted_cells": obj["highlighted_cells"],
                     }

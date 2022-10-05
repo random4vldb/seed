@@ -2,7 +2,7 @@ local lib = import "trainer.libsonnet";
 
 {
     "steps": {
-        "train_sent_selection": {
+        "train": {
             "type": "pytorch_lightning::train",
             "model": {
                 "type": "seed_verification",
