@@ -36,14 +36,13 @@ class InfotabModel(Model):
         embed_size = self.model.config.hidden_size
         self.classifier = FeedForward(embed_size, int(embed_size / 2), 2).cuda()
 
-    def forward(self, inputs):
-        enc, mask, seg, gold, ids = inputs
+    def forward(self, input_ids, attention_mask, token_type_ids, labels=None):
         loss_fn = nn.CrossEntropyLoss()
 
-        outputs = self.model(enc, attention_mask=mask, token_type_ids=seg)
+        outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
         predictions = self.classifier(outputs[1])
-
-        return logits
+        loss = loss_fn(predictions, labels)
+        return {"loss": loss, "predictions": predictions, "labels": labels}
     
 
 

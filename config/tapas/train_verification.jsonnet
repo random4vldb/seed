@@ -25,7 +25,7 @@
                 "ref": "read_data",
             },
             train_dataloader: {
-                batch_size: 16,
+                batch_size: 4,
                 shuffle: true,
                 collate_fn: {
                     type: "transformers::DataCollatorWithPadding",
@@ -36,10 +36,9 @@
             },
             validation_split: "validation",
             validation_dataloader: {
-                batch_size: 16,
+                batch_size: 4,
                 shuffle: false
             },
-            device_count: 8
         },
         eval: {
             type: "classification_score",
@@ -52,7 +51,7 @@
                 "ref": "read_data",
             },
             test_split: "validation",
-            batch_size: 16
+            batch_size: 4
         },
     },
 

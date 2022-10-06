@@ -2,7 +2,7 @@
     steps: {
         data_input: {
             type: "pipeline_input_data",
-            input_file: "data/totto2/augmented/dev.jsonl"
+            input_path: "data/totto2/augmented/dev.jsonl"
         },
         document_retrieval: {
             type: "seed_document_retrieval",

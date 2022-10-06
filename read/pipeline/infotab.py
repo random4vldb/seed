@@ -1,63 +1,53 @@
-from .seed import SEEDPipeline
-from loguru import logger
+from tango import Step, JsonFormat, Format
+from typing import Optional
 from typing import List
 
-class InfotabPipeline(SEEDPipeline):
-    def __init__(self, searcher, sent_selection, verifier, evaluator) -> None:
-        super().__init__(searcher, sent_selection, verifier, evaluator)
+@Step.register("infotab_table_verification")
+class InfotabTableVerification(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = JsonFormat()
 
-    def __call__(self, examples: List[dict]) -> List[bool]:
-        hits_per_query = self.searcher(examples, k=10)
-        table_with_sent = []
+    def run(self, sent_selection_models, verification_models, tokenizer, data, sentence_results: List[List[str]]) -> List[bool]:
+        pass
 
-        doc_results = []
 
-        for i, (example, hits) in enumerate(zip(examples, hits_per_query)):
-            ids = set()
-            for hit in hits:
-                id = hit["id"].split("::")[0]
+@Step.register("infotab_pipeline_preprocess")
+class InfotabPipelinePreProcess(Step):
+    def run(self, data, doc_results):
+        examples = []
+        for idx, (example, doc_result) in enumerate(zip(data, doc_results)):
+            for sentence in doc_result:
+                examples.append(
+                    {
+                        "table_id": idx,
+                        "annotator_id": idx,
+                        "hypothesis":  sentence,
+                        "table": example["table"],
+                        "title": example["title"],
+                        "highlighted_cells": example["highlighted_cells"],
+                    }
+                )
 
-                if id in ids:
-                    continue
+        return examples
+
+@Step.register("infotab_pipeline_postprocess")
+class InfotabPipelinePostProcess(Step):
+
+    def run(self, results):
+        id2results = {}
+        for idx, result in enumerate(results):
+            if result["table_id"] in id2results:
+                if results["label"] == 1:
+                    id2results[result["table_id"]] = True
                 else:
-                    ids.add(id)                    
-
-                doc_results.append((hit["score"], hit["title"] == examples[i]["title"], i))
-                page = self.ks.get_page_by_id(id)
-                if page is None:
-                    continue
-                for passage in page["text"]:
-                    if "::::" in passage:
-                        continue
-                    table_with_sent.append({
-                        "id": id,
-                        "title": hit["title"],
-                        "passage": passage,
-                        "label": example["label"],
-                        "query": example["query"]
-                    })
-                if hit["title"] == examples[i]["title"]:
-                    table_with_sent.append({
-                        "id": id,
-                        "title": hit["title"],
-                        "passage": examples[i]["correct_sentence"],
-                        "label": example["label"],
-                        "query": example["query"]
-                    })
-
-
-        logger.info(f"Found {len(table_with_sent)} table passages")
-        logger.info(f"Found {len(doc_results)} doc passages")
-
-        sent_results = self.sent_selection(table_with_sent)
-        sent_results = [x for x in sent_results if x is not None]
-
-        logger.info(f"Found {len(sent_results)} sentences")
-
-        sent_results = self.verifier(sent_results)
-
-        logger.info(f"Found {len(sent_results)} sentences with a verdict")
-
-        self.evaluator.add_results(sent_results)
-
-        return [x["verdict"] for x in sent_results]
+                    id2results[result["table_id"]] = False
+            else:
+                if results["label"] == 1:
+                    id2results[result["table_id"]] = True
+                
+        final_results = [False] * len(results)
+        for idx, result in id2results.items():
+            final_results[idx] = id2results[idx]
+        
+        return final_results
