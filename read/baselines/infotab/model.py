@@ -2,6 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tango.integrations.torch import Model
 from transformers import AutoConfig, AutoModel
+import torch
 
 class FeedForward(nn.Module):
     def __init__(self, in_dim, out_dim, labels):
@@ -40,8 +41,9 @@ class InfotabModel(Model):
         loss_fn = nn.CrossEntropyLoss()
 
         outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
-        predictions = self.classifier(outputs[1])
-        loss = loss_fn(predictions, labels)
+        outputs = self.classifier(outputs[1])
+        loss = loss_fn(outputs, labels)
+        predictions = torch.argmax(outputs, dim=1)
         return {"loss": loss, "predictions": predictions, "labels": labels}
     
 

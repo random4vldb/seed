@@ -62,12 +62,28 @@ local split_steps =  {
                 batch_size: 4,
                 shuffle: false
             },
+        },
+        eval: {
+            type: "torch::eval",
+            model: {
+                type: "ref",
+                ref: "train",
+            },
+            dataset_dict: {
+                "type": "ref",
+                "ref": "preprocess",
+            },
+            dataloader: {
+                batch_size: 4,
+                shuffle: false
+            },
             callbacks: [
                 {
                     type: "classify_score_callback"
                 },
             ],
-            auto_aggregate_val_metric: false
-        }
+            auto_aggregate_metrics: false,
+            test_split: "dev",
+        },
     },
 }

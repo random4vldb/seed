@@ -8,7 +8,7 @@ local lib = import 'trainer.libsonnet';
                 "type": "seed_sent_selection",
                 "model_name_or_path": "facebook/bart-large"
             },
-            "trainer": lib.trainer(name="sent_selection") + {
+            "trainer": lib.trainer(name="verification") + {
                 max_epochs: 10
             },
             "datamodule":{
