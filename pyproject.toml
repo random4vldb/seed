@@ -23,7 +23,7 @@ ray = {extras = ["default"], version = "^1.13.0"}
 ujson = "^5.4.0"
 datasets = "^2.4.0"
 tokenizers = "^0.12.1"
-wandb = "^0.12.21"
+wandb = "^0.13.4"
 spacy = {extras = ["cuda113"], version = "^3.4.1"}
 elasticsearch-dsl = "^7.4.0"
 sentence-transformers = "^2.2.2"

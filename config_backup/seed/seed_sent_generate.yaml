@@ -1,7 +1,0 @@
-pyserini_index: temp/pyserini_index
-positive_pids: data/totto2/filtered/positive_pids
-output_dir: temp/seed/sent_selection/data/
-num_processes: 40
-max_instance_expansion: 5
-allow_answer_bearing: False
-max_negatives: 5

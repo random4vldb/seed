@@ -1,2 +1,0 @@
-defaults:
-  - model_checkpoint_loss.yaml

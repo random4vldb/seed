@@ -1,4 +1,0 @@
-data_dir: data/totto/standard
-passage_ids: temp/passage_ids.txt
-title2id_file: temp/title2id.json
-doc_id2pids_file: temp/doc_id2pids.json

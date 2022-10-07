@@ -1,3 +1,0 @@
-hf_checkpoint:
-  _target_: read.utils.hf.HuggingFaceHubCallback
-  repo_name: clapika2010/dpr_finetuned_totto

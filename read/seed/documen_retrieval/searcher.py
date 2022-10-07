@@ -13,6 +13,11 @@ from transformers import (
 )
 import pandas as pd
 from loguru import logger
+from tango import Step, Format, JsonFormat
+from typing import Optional
+from kilt.knowledge_source import KnowledgeSource
+
+from blingfire import text_to_sentences
 
 
 class DPRSearcher:
@@ -92,18 +97,25 @@ class DPRSearcher:
         return outputs, scores
 
     def __call__(self, examples, k=10):
-        outputs, _ = self.batch_query([x["linearized_table"] for x in examples], k, include_docs=True)
+        outputs, _ = self.batch_query(
+            [x["linearized_table"] for x in examples], k, include_docs=True
+        )
 
         return outputs
 
 
-class HybridSearcher:
-    def __init__(self, lucene_index, qry_encoder_path, ctx_encoder_path, cfg):
-        self.searcher = LuceneSearcher(lucene_index)
-        self.qry_tokenizer, self.qry_encoder, self.ctx_tokenizer, self.ctx_encoder = self._get_tokenizer_and_model(qry_encoder_path, ctx_encoder_path)
-        self.cfg = cfg
 
-    def _get_tokenizer_and_model(cfg, qry_encoder_path, ctx_encoder_path):
+class HybridSearcher:
+    def __init__(self, lucene_index, qry_encoder_path, ctx_encoder_path):
+        self.searcher = LuceneSearcher(lucene_index)
+        (
+            self.qry_tokenizer,
+            self.qry_encoder,
+            self.ctx_tokenizer,
+            self.ctx_encoder,
+        ) = self._get_tokenizer_and_model(qry_encoder_path, ctx_encoder_path)
+
+    def _get_tokenizer_and_model(self, qry_encoder_path, ctx_encoder_path):
         qry_encoder = DPRQuestionEncoder.from_pretrained(qry_encoder_path)
         qry_encoder.eval()
         ctx_encoder = DPRContextEncoder.from_pretrained(ctx_encoder_path)
@@ -116,10 +128,7 @@ class HybridSearcher:
         )
         return qry_tokenizer, qry_encoder, ctx_tokenizer, ctx_encoder
 
-    def ctx_embed(
-        self,
-        doc_batch: List[dict]
-    ) -> np.ndarray:
+    def ctx_embed(self, doc_batch: List[dict]) -> np.ndarray:
         documents = {
             "title": [doci["title"] for doci in doc_batch],
             "text": [doci["contents"] for doci in doc_batch],
@@ -139,13 +148,10 @@ class HybridSearcher:
             ).pooler_output
         return embeddings.detach().cpu().to(dtype=torch.float16).numpy()
 
-    def qry_embed(
-        self,
-        qry_batch: List[str]
-    ) -> np.ndarray:
+    def qry_embed(self, qry_batch: List[str]) -> np.ndarray:
         inputs = self.qry_tokenizer(
             qry_batch, truncation=True, padding="longest", return_tensors="pt"
-        )  
+        )
         with torch.no_grad():
             embeddings = self.qry_encoder(
                 inputs["input_ids"].to(device=self.qry_encoder.device),
@@ -162,9 +168,20 @@ class HybridSearcher:
         scores = [(np.dot(qry_vec, ctx_veci)) for p, ctx_veci in zip(hits, ctx_vecs)]
 
         if include_docs:
-            result = [{"title": hit["title"], "text": hit["contents"], "score": score, "id": hit["id"]} for hit, score in zip(hits, scores)]
+            result = [
+                {
+                    "title": hit["title"],
+                    "text": hit["contents"],
+                    "score": score,
+                    "id": hit["id"],
+                }
+                for hit, score in zip(hits, scores)
+            ]
         else:
-            result = [{"title": hit["title"], "score": score, "id": hit["id"]} for hit, score in zip(hits, scores)]
+            result = [
+                {"title": hit["title"], "score": score, "id": hit["id"]}
+                for hit, score in zip(hits, scores)
+            ]
 
         return result, scores
 
@@ -188,32 +205,99 @@ class HybridSearcher:
             k=k,
         )
 
-
         outputs = [[] for _ in range(len(queries))]
         scores = [[] for _ in range(len(queries))]
         for qid, hits in result.items():
-            output, score = self.process_result(
-                queries[int(qid)], hits, include_docs
-            )
+            output, score = self.process_result(queries[int(qid)], hits, include_docs)
 
-
-            outputs[int(qid)] = sorted(output, key=lambda x: x["score"], reverse=True)[:k]
+            outputs[int(qid)] = sorted(output, key=lambda x: x["score"], reverse=True)[
+                :k
+            ]
             scores[int(qid)] = sorted(score, reverse=True)[:k]
 
         return outputs, scores
 
-    
     def __call__(self, examples, k=10):
         queries = []
         for example in examples:
             table = pd.DataFrame(example["table"])
-            query = " ".join([table.iloc[i, j] for i, j in example["highlighted_cells"]])
-            query = example["table_page_title"] + " " + example["table_section_title"] + " " + query
+            query = " ".join(
+                [table.iloc[i, j] for i, j in example["highlighted_cells"]]
+            )
+            query = example["title"] + " " + example["title"] + " " + query
             queries.append(query)
 
-        full_outputs = []
-        for i in range(0, len(queries), self.cfg.batch_size):
-            outputs, _ = self.batch_query(queries[i:i+self.cfg.batch_size], k, include_docs=True)
-            full_outputs.extend(outputs)
+        outputs, _ = self.batch_query(
+            queries, k, include_docs=True
+        )
 
-        return full_outputs 
+        return outputs
+
+
+@Step.register("seed_document_retrieval")
+class DocumentRetrieval(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = JsonFormat()
+    VERSION: Optional[str] = "0012"
+
+    @staticmethod
+    def init_searcher(searcher, faiss_index, lucene_index, qry_encoder, ctx_encoder):
+        if searcher == "dpr":
+            searcher = DPRSearcher(faiss_index, lucene_index, qry_encoder)
+        elif searcher == "hybrid":
+            searcher = HybridSearcher(lucene_index, qry_encoder, ctx_encoder)
+
+        return searcher
+
+    def run(
+        self,
+        data: List[dict],
+        searcher,
+        faiss_index,
+        lucene_index,
+        qry_encoder,
+        ctx_encoder,
+        batch_size,
+    ) -> List[bool]:
+        searcher = self.init_searcher(
+            searcher, faiss_index, lucene_index, qry_encoder, ctx_encoder
+        )
+
+        ks = KnowledgeSource()
+        hits_per_query = []
+        batch = []
+
+        for example in data:
+            batch.append(example)
+            if len(batch) == batch_size:
+                hits_per_query += searcher(batch, k=10)
+                batch = []
+
+        doc_results = []
+
+        for i, (example, hits) in enumerate(zip(data, hits_per_query)):
+            doc_result = []
+            ids = set()
+            for hit in hits:
+                id = hit["id"].split("::")[0]
+
+                if id in ids:
+                    continue
+                else:
+                    ids.add(id)
+
+                page = ks.get_page_by_id(id)
+                if page is None:
+                    continue
+                for passage in page["text"]:
+                    if "::::" in passage:
+                        continue
+                    for sent in text_to_sentences(passage).split("\n"):
+                        if (
+                            len(sent.split()) <= 4
+                        ):  # Short sentences are mostly section titles.
+                            continue
+                        doc_result.append((sent, hit["score"].item()))
+            doc_results.append(doc_result)
+        return doc_results

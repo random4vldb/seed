@@ -1,5 +1,0 @@
-train_path: temp/seed/sent_selection/totto_train.jsonl
-dev_path: temp/seed/sent_selection/totto_dev.jsonl
-output_dir: temp/seed/sent_selection/models/
-train: True
-dev: True

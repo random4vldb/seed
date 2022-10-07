@@ -8,11 +8,11 @@ local lib = import "trainer.libsonnet";
                 "type": "seed_verification",
                 "model_name_or_path": "facebook/bart-large"
             },
-            "trainer": lib.trainer("seed_sent_selection") + {
+            "trainer": lib.trainer("seed_verification") + {
                 max_epochs: 10
             },
             "datamodule":{
-                "type": "seed_verification_data",
+                "type": "seed_sent_selection_data",
                 "tokenizer": "facebook/bart-large",
                 "dataset_name_or_path": "data/totto2/triplets",
                 "train_batch_size": 16,

@@ -1,4 +1,0 @@
-input_file: temp/seed/sent_selection/totto_train.jsonl
-output_file: temp/seed/sent_selection/tabfact_train.jsonl
-vocab_file: resources/freq_list.json
-stop_words_file: resources/stop_words.json

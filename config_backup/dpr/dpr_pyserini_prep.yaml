@@ -1,3 +1,0 @@
-input: temp/kilt_passages
-output: temp/pyserini_passages
-file_count: 8

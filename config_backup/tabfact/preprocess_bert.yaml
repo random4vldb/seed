@@ -1,4 +1,0 @@
-input_file: temp/seed/sent_selection/totto_train.jsonl
-preprocessed_file: temp/seed/sent_selection/tabfact_train.jsonl
-output_file: temp/tabfact/sent_selection/tabfact_train.jsonl
-scan: horizontal

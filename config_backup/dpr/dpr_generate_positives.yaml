@@ -1,9 +1,0 @@
-data_dir: data/totto2/filtered
-passages: temp/kilt_passages
-output_dir: positive_pids
-passage_ids: temp/passage_ids.txt
-pid2passages_file: temp/pid2passages.json
-title2doc_id_file: temp/title2id.json
-doc_id2pids_file: temp/doc_id2pids.json
-min_overlap: 0.75
-linearize: totto
