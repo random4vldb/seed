@@ -43,7 +43,7 @@ local verification_train = {
 {
     steps: sent_selection_train + verification_train + {
         data_input: {
-            type: "totto_input",
+            type: "pipeline::input_totto",
             input_file: "data/totto2/augmented/dev.jsonl",
             size: 10
         },
@@ -62,7 +62,7 @@ local verification_train = {
 
         },
         sentence_selection: {
-            type: "seed_sentence_selection",
+            type: "pipeline::sentence_selection",
             model: {
                 type: "ref",
                 ref: "train_sent_selection"
@@ -78,7 +78,7 @@ local verification_train = {
             },
         },
         table_verification: {
-            type: "seed_table_verification",
+            type: "pipeline::table_verification",
             model: {
                 type: "ref",
                 ref: "train_verification"
