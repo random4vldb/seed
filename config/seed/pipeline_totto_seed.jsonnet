@@ -27,7 +27,7 @@ local verification_train = {
                 "type": "seed::verification_model",
                 "model_name_or_path": "facebook/bart-large"
             },
-            "trainer": lib.trainer(name="seed_sent_selection") + {
+            "trainer": lib.trainer(name="verification") + {
                 max_epochs: 10
             },
             "datamodule":{

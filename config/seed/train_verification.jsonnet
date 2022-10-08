@@ -8,7 +8,7 @@ local lib = import "trainer.libsonnet";
                 "type": "seed::verification_model",
                 "model_name_or_path": "facebook/bart-large"
             },
-            "trainer": lib.trainer("seed_verification") + {
+            "trainer": lib.trainer("verification") + {
                 max_epochs: 10
             },
             "datamodule":{
