@@ -4,14 +4,14 @@ local sent_selection_train = {
     "train_sent_selection": {
             "type": "pytorch_lightning::train",
             "model": {
-                "type": "seed_sent_selection",
+                "type": "seed::sent_selection_model",
                 "model_name_or_path": "facebook/bart-large"
             },
             "trainer": lib.trainer(name="sent_selection") + {
                 max_epochs: 10
             },
             "datamodule":{
-                "type": "seed_sent_selection_data",
+                "type": "seed::sent_selection_data",
                 "tokenizer": "facebook/bart-large",
                 "dataset_name_or_path": "temp/seed/sent_selection/data",
                 "train_batch_size": 16,
@@ -24,14 +24,14 @@ local verification_train = {
     "train_verification": {
             "type": "pytorch_lightning::train",
             "model": {
-                "type": "seed_verification",
+                "type": "seed::verification_model",
                 "model_name_or_path": "facebook/bart-large"
             },
             "trainer": lib.trainer(name="seed_sent_selection") + {
                 max_epochs: 10
             },
             "datamodule":{
-                "type": "seed_verification_data",
+                "type": "seed::verification_data",
                 "tokenizer": "facebook/bart-large",
                 "dataset_name_or_path": "data/totto2/triplets",
                 "train_batch_size": 16,
@@ -48,7 +48,7 @@ local verification_train = {
             size: 10
         },
         document_retrieval: {
-            type: "seed_document_retrieval",
+            type: "pipeline::document_retrieval",
             searcher: "hybrid",
             faiss_index: "pyserini_faiss_full",
             lucene_index: "temp/pyserini_index",

@@ -1,13 +1,13 @@
 local lib = import '../seed/trainer.libsonnet';
 
 local sent_selection_train = {
-    read_data: {
-        type: "tapas_input_data",
+    read_data_sent_selection: {
+        type: "tapas::input_data",
         tokenizer: "google/tapas-base",
         train_file: "temp/seed/sent_selection/data/train.jsonl",
         dev_file: "temp/seed/sent_selection/data/dev.jsonl"
     },
-    train: {
+    train_sent_selection: {
         type: "torch::train",
         model: {
             type: "transformers::AutoModelForSequenceClassification::from_pretrained",
@@ -22,7 +22,7 @@ local sent_selection_train = {
         train_epochs: 5,
         dataset_dict: {
             "type": "ref",
-            "ref": "read_data",
+            "ref": "read_data_sent_selection",
         },
         train_dataloader: {
             batch_size: 16,
@@ -45,11 +45,11 @@ local sent_selection_train = {
         type: "classification_score",
         model: {
             type: "ref",
-            ref: "train",
+            ref: "train_sent_selection",
         },
         dataset_dict: {
             "type": "ref",
-            "ref": "read_data",
+            "ref": "read_data_sent_selection",
         },
         test_split: "validation",
         batch_size: 16
@@ -57,14 +57,14 @@ local sent_selection_train = {
 };
 
 local verification_train = {
-    read_data: {
-        type: "tapas_input_data",
+    read_data_verification: {
+        type: "tapas::input_data",
         tokenizer: "google/tapas-base",
         task: "verification",
         train_file: "data/totto2/triplets/train.jsonl",
         dev_file: "data/totto2/triplets/dev.jsonl"
     },
-    train: {
+    train_verification: {
         type: "torch::train",
         model: {
             type: "transformers::AutoModelForSequenceClassification::from_pretrained",
@@ -79,7 +79,7 @@ local verification_train = {
         train_epochs: 5,
         dataset_dict: {
             "type": "ref",
-            "ref": "read_data",
+            "ref": "read_data_verification",
         },
         train_dataloader: {
             batch_size: 4,
@@ -98,49 +98,29 @@ local verification_train = {
         },
     },
     eval: {
-        type: "classification_score",
+        type: "eval::classification",
         model: {
             type: "ref",
-            ref: "train",
+            ref: "train_verification",
         },
         dataset_dict: {
             "type": "ref",
-            "ref": "read_data",
+            "ref": "read_data_verification",
         },
         test_split: "validation",
         batch_size: 4
     },
 };
 
-local verification_train = {
-    "train_verification": {
-            "type": "pytorch_lightning::train",
-            "model": {
-                "type": "seed_verification",
-                "model_name_or_path": "facebook/bart-large"
-            },
-            "trainer": lib.trainer(name="seed_sent_selection") + {
-                max_epochs: 10
-            },
-            "datamodule":{
-                "type": "seed_verification_data",
-                "tokenizer": "facebook/bart-large",
-                "dataset_name_or_path": "data/totto2/triplets",
-                "train_batch_size": 16,
-                "eval_batch_size": 16
-            }
-        }
-};
-
 {
     steps: sent_selection_train + verification_train + {
         data_input: {
-            type: "totto_input",
+            type: "pipeline::input_totto",
             input_file: "data/totto2/augmented/dev.jsonl",
             size: 10
         },
         document_retrieval: {
-            type: "seed_document_retrieval",
+            type: "pipeline::document_retrieval",
             searcher: "hybrid",
             faiss_index: "pyserini_faiss_full",
             lucene_index: "temp/pyserini_index",
@@ -154,7 +134,7 @@ local verification_train = {
 
         },
         sentence_selection: {
-            type: "seed_sentence_selection",
+            type: "pipeline::sentence_selection",
             model: {
                 type: "ref",
                 ref: "train_sent_selection"
@@ -170,7 +150,7 @@ local verification_train = {
             },
         },
         table_verification: {
-            type: "seed_table_verification",
+            type: "pipeline::table_verification",
             model: {
                 type: "ref",
                 ref: "train_verification"

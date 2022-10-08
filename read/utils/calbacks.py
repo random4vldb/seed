@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 
 
 
-@EvalCallback.register("classify_score_callback")
+@EvalCallback.register("eval::classification_score_callback")
 class ClassificationEvalCallback(EvalCallback):
     name2metrics = {
             "accuracy": evaluate.load("accuracy"),

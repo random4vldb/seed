@@ -86,10 +86,10 @@ class VerificationDataset(torch.utils.data.Dataset):
         return len(self.df)
 
 
-@Step.register("tapas_input_data")
+@Step.register("tapas::input_data")
 class TapasInputData(Step):
-    DETERMINISTIC = False
-    CACHEABLE = False
+    DETERMINISTIC = True
+    CACHEABLE = True
 
     def run(self, tokenizer, train_file, dev_file, task="sent_selection") -> DatasetDict:
         tokenizer = TapasTokenizer.from_pretrained(tokenizer, max_question_length=256)

@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 from tango.integrations.pytorch_lightning import LightningDataModule
 
-@LightningDataModule.register("seed_sent_selection_data")
+@LightningDataModule.register("seed::sent_selection_data")
 class SentSelectDataModule(LightningDataModule):
 
     def __init__(

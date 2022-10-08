@@ -12,7 +12,7 @@ from transformers import (
 )
 
 
-@LightningModule.register("seed_sent_selection")
+@LightningModule.register("seed::sent_selection_model")
 class SentSelectModule(LightningModule):
     def __init__(
         self,

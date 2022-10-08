@@ -79,7 +79,7 @@ local split_steps =  {
             },
             callbacks: [
                 {
-                    type: "classify_score_callback"
+                    type: "eval::classification_score_callback"
                 },
             ],
             auto_aggregate_metrics: false,

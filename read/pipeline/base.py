@@ -7,7 +7,7 @@ from tango import Step, Format, JsonFormat
 from typing import Optional
 
 
-@Step.register("table_verification")
+@Step.register("pipeline::table_verification")
 class TableVerification(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True
@@ -52,7 +52,7 @@ class TableVerification(Step):
         return all_preds
 
 
-@Step.register("seed_sentence_selection")
+@Step.register("pipeline::sentence_selection")
 class SentenceSelector(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True

@@ -41,7 +41,7 @@
             device_count: 8
         },
         eval: {
-            type: "classification_score",
+            type: "eval::classification",
             model: {
                 type: "ref",
                 ref: "train",

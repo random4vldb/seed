@@ -20,7 +20,7 @@ root = pyrootutils.setup_root(
 from tango import Step, JsonFormat, Format
 
 
-@Step.register("totto_input")
+@Step.register("pipeline::input_totto")
 class TottoInputData(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True

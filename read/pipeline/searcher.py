@@ -234,7 +234,7 @@ class HybridSearcher:
         return outputs
 
 
-@Step.register("seed_document_retrieval")
+@Step.register("pipeline::document_retrieval")
 class DocumentRetrieval(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True

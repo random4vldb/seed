@@ -5,7 +5,7 @@ local lib = import "trainer.libsonnet";
         "train": {
             "type": "pytorch_lightning::train",
             "model": {
-                "type": "seed_verification",
+                "type": "seed::verification_model",
                 "model_name_or_path": "facebook/bart-large"
             },
             "trainer": lib.trainer("seed_verification") + {

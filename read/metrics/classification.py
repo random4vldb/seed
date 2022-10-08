@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 import evaluate
 
 
-@Step.register("classification_score")
+@Step.register("eval::classification")
 class ClassificationScoreStep(Step[Dict[str, Tensor]]):
     FORMAT: Format = JsonFormat()
 

@@ -12,7 +12,7 @@ from transformers import (
 )
 
 
-@LightningModule.register("seed_verification")
+@LightningModule.register("seed::verification_model")
 
 class Seed3Module(LightningModule):
     def __init__(

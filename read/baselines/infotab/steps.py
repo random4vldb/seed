@@ -26,7 +26,7 @@ root = pyrootutils.setup_root(
 inflect = inflect.engine()
 
 
-@Step.register("infotab_json_to_para")
+@Step.register("infotab::json_to_para")
 class InfoTabJsonToPara(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = True
@@ -196,7 +196,7 @@ class InfoTabJsonToPara(Step):
         return dataset_dict
 
 
-@Step.register("infotab_preprocess")
+@Step.register("infotab::preprocess")
 class InfoTabPreprocess(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = True
@@ -261,7 +261,7 @@ class InfoTabPreprocess(Step):
         return DatasetDict(dataset_dict)
 
 
-@Step.register("infotab_input_data")
+@Step.register("infotab::input_data")
 class InfoTabInputData(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = True
@@ -290,7 +290,7 @@ class InfoTabInputData(Step):
         return split2examples
 
 
-@Step.register("infotab_input_from_totto")
+@Step.register("infotab::input_from_totto")
 class InfoTabInputFromTotto(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = False

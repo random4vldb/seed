@@ -12,7 +12,7 @@ class InfotabTableVerification(Step):
         pass
 
 
-@Step.register("infotab_pipeline_preprocess")
+@Step.register("infotab::pipeline_preprocess")
 class InfotabPipelinePreProcess(Step):
     def run(self, data, doc_results):
         examples = []
@@ -31,7 +31,7 @@ class InfotabPipelinePreProcess(Step):
 
         return examples
 
-@Step.register("infotab_pipeline_postprocess")
+@Step.register("infotab::pipeline_postprocess")
 class InfotabPipelinePostProcess(Step):
 
     def run(self, results):

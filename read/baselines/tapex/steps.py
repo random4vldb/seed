@@ -90,7 +90,7 @@ def tokenize_verification(batch, tokenizer):
     return encodings
 
 
-@Step.register("tapex_input_data")
+@Step.register("tapex::input_data")
 class TapexInputData(Step):
     def run(self, train_file, dev_file, tokenizer, task):
         datasets = load_dataset(

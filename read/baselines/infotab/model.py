@@ -27,7 +27,7 @@ class FeedForward(nn.Module):
         return output
 
 
-@Model.register("infotab")
+@Model.register("infotab::model")
 class InfotabModel(Model):
     def __init__(self, model_name_or_path) -> None:
         super().__init__()
