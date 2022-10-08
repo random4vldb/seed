@@ -92,19 +92,6 @@ local verification_train = {
                 type: "ref",
                 ref: "data_input"
             },
-        },
-        // table_correction: {
-        //     type: "seed_table_correction",
-        //     model: "temp/seed/table_correction/models/model.ckpt",
-        //     tokenizer: "facebook/bart-large",
-        //     verification_results: {
-        //         type: "ref",
-        //         ref: "table_verification",
-        //     },
-        //     data: {
-        //         type: "ref",
-        //         ref: "data_input"
-        //     },
-        // },
+        }
     },
 }

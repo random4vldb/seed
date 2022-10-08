@@ -6,7 +6,10 @@ from torch.utils.data import DataLoader
 from accelerate import Accelerator
 
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> refactor: reorganize pipeline file structures
 Step.register("tapas_sent_selection")
 class TapasSentSelection(Step):
     DETERMINISTIC: bool = True
