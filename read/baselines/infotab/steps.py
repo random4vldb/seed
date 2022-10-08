@@ -31,6 +31,7 @@ class InfoTabJsonToPara(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = True
     FORMAT = JsonFormat()
+    VERSION: Optional[str] = "005452"
 
     def run(self, dataset_dict, rand_perm):
         for split, data in dataset_dict.items():
@@ -80,7 +81,7 @@ class InfoTabJsonToPara(Step):
                 if not obj:
                     continue
                 obj = {x: y if isinstance(y, list) else [y] for x, y in obj.items()}
-
+                
                 try:
                     title = row["title"]
                 except KeyError as e:
@@ -189,6 +190,7 @@ class InfoTabJsonToPara(Step):
                     "hypothesis": row["hypothesis"],
                     "label": label,
                 }
+                print(obj)
                 result.append(obj)
             dataset_dict[split] = result
         return dataset_dict
@@ -198,7 +200,7 @@ class InfoTabJsonToPara(Step):
 class InfoTabPreprocess(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = True
-    VERSION: Optional[str] = "0046"
+    VERSION: Optional[str] = "005"
 
     def run(self, dataset_dict, tokenizer, single_sentence):
         tokenizer = AutoTokenizer.from_pretrained(tokenizer)
@@ -238,7 +240,9 @@ class InfoTabPreprocess(Step):
                 # we just return a list of zeros for them. This is just
                 # required for completeness.
                 if "token_type_ids" not in encoded_inps.keys():
-                    encoded_inps["token_type_ids"] = torch.zeros_like(encoded_inps["input_ids"])
+                    encoded_inps["token_type_ids"] = torch.zeros_like(
+                        encoded_inps["input_ids"]
+                    )
 
                 examples.append(
                     {
@@ -261,7 +265,7 @@ class InfoTabPreprocess(Step):
 class InfoTabInputData(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = True
-    VERSION: Optional[str] = "002"
+    VERSION: Optional[str] = "0051"
 
     def run(self, input_dir):
         split2examples = []
@@ -279,8 +283,6 @@ class InfoTabInputData(Step):
                         if "table_page_title" in jobj
                         else jobj["title"],
                         "highlighted_cells": jobj["highlighted_cells"]
-                        if "highlighted_cells" in jobj
-                        else [],
                     }
                     idx += 1
                     split2examples[input_file.stem].append(example)
@@ -292,14 +294,14 @@ class InfoTabInputData(Step):
 class InfoTabInputFromTotto(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = False
-    VERSION = "002"
+    VERSION = "005241"
 
     def run(self, input_dir):
         split2examples = collections.defaultdict(list)
         idx = 0
         for input_file in Path(input_dir).glob("*.jsonl"):
             with jsonlines.open(input_file) as reader:
-                for obj in reader:
+                for obj in list(reader)[:100]:
                     split2examples[input_file.stem].append(
                         {
                             "table_id": idx,
@@ -328,4 +330,6 @@ class InfoTabInputFromTotto(Step):
                         }
                     )
                 idx += 2
+        # for key in split2examples:
+        #     random.shuffle(split2examples[key])
         return split2examples

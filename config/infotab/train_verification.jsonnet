@@ -42,7 +42,7 @@ local split_steps =  {
                     lr: 1e-5,
               },
             },
-            train_epochs: 10,
+            train_epochs: 20,
             dataset_dict: {
                 "type": "ref",
                 "ref": "preprocess",
