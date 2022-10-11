@@ -34,8 +34,8 @@ local verification_train = {
                 "type": "seed::verification_data",
                 "tokenizer": "facebook/bart-large",
                 "dataset_name_or_path": "data/totto2/triplets",
-                "train_batch_size": 16,
-                "eval_batch_size": 16
+                "train_batch_size": 8,
+                "eval_batch_size": 8
             }
         }
 };
