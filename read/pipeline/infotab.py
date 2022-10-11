@@ -2,15 +2,6 @@ from tango import Step, JsonFormat, Format
 from typing import Optional
 from typing import List
 
-@Step.register("infotab_table_verification")
-class InfotabTableVerification(Step):
-    DETERMINISTIC: bool = True
-    CACHEABLE: Optional[bool] = True
-    FORMAT: Format = JsonFormat()
-
-    def run(self, sent_selection_models, verification_models, tokenizer, data, sentence_results: List[List[str]]) -> List[bool]:
-        pass
-
 
 @Step.register("infotab::pipeline_preprocess")
 class InfotabPipelinePreProcess(Step):

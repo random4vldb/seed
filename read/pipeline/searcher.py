@@ -239,7 +239,7 @@ class DocumentRetrieval(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "003"
+    VERSION: Optional[str] = "004"
 
     @staticmethod
     def init_searcher(searcher, faiss_index, lucene_index, qry_encoder, ctx_encoder):
@@ -271,10 +271,10 @@ class DocumentRetrieval(Step):
         for example in data:
             batch.append(example)
             if len(batch) == batch_size:
-                hits_per_query += searcher(batch, k=10)
+                hits_per_query += searcher(batch, k=5)
                 batch = []
 
-        hits_per_query += searcher(batch, k=10)
+        hits_per_query += searcher(batch, k=5)
 
 
         doc_results = []

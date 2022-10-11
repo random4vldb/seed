@@ -3,6 +3,11 @@ from accelerate import Accelerator
 from tango import Format, JsonFormat, Step
 from transformers import AutoTokenizer
 from blingfire import text_to_sentences
+from typing import Optional
+import evaluate
+import pandas as pd
+import collections
+import json
 
 
 @Step.register("pipeline::table_verification")
@@ -73,9 +78,11 @@ class SentenceSelection(Step):
 
         for table, doc_result in zip(queries, doc_results):
             preds = []
+            print(len(doc_result))
             for doc, score, title in doc_result:
-                for sent in text_to_sentences(doc):
-                    inputs = tokenizer(table=table, queries=doc, return_tensors="pt", padding=True, truncation=True)
+                for sent in text_to_sentences(doc).split("\n"):
+                    print(sent)
+                    inputs = tokenizer(table=table, queries=sent, return_tensors="pt", padding=True, truncation=True)
 
                     inputs = {k: v.cuda() for k, v in inputs.items()}
 
@@ -96,7 +103,7 @@ class Evaluation(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "00493"
+    VERSION: Optional[str] = "00497"
 
     step2name2metrics = {
         x : {
@@ -151,12 +158,9 @@ class Evaluation(Step):
         sentence_preds, sentence_labels = zip(*self.process_sentence_selection(data, sentence_results))
 
         result = collections.defaultdict(dict)
-        print(len(verified_results))
-        print(len(data))
 
         for step, preds, labels in zip(["document_retrieval", "sentence_selection", "table_verification"], [doc_preds, sentence_preds, verified_results], [doc_labels, sentence_labels, [x["label"] for x in data]]):
             for name, metric in self.step2name2metrics[step].items():
-                print(step, name, metric.compute(predictions=preds, references=labels))
-                result[step][name] =  metric.compute(predictions=preds, references=labels).items()
-        print(result)
+                for metric_name, metric_value in metric.compute(predictions=preds, references=labels).items():
+                    result[step][f"{name}_{metric_name}"] = str(metric_value)
         return result
