@@ -239,7 +239,7 @@ class DocumentRetrieval(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "0012"
+    VERSION: Optional[str] = "003"
 
     @staticmethod
     def init_searcher(searcher, faiss_index, lucene_index, qry_encoder, ctx_encoder):
@@ -263,7 +263,7 @@ class DocumentRetrieval(Step):
         searcher = self.init_searcher(
             searcher, faiss_index, lucene_index, qry_encoder, ctx_encoder
         )
-
+        
         ks = KnowledgeSource()
         hits_per_query = []
         batch = []
@@ -273,6 +273,9 @@ class DocumentRetrieval(Step):
             if len(batch) == batch_size:
                 hits_per_query += searcher(batch, k=10)
                 batch = []
+
+        hits_per_query += searcher(batch, k=10)
+
 
         doc_results = []
 
@@ -293,11 +296,7 @@ class DocumentRetrieval(Step):
                 for passage in page["text"]:
                     if "::::" in passage:
                         continue
-                    for sent in text_to_sentences(passage).split("\n"):
-                        if (
-                            len(sent.split()) <= 4
-                        ):  # Short sentences are mostly section titles.
-                            continue
-                        doc_result.append((sent, hit["score"].item()))
+                    
+                    doc_result.append((passage, hit["score"].item(), hit["title"]))
             doc_results.append(doc_result)
         return doc_results

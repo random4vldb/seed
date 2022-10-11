@@ -164,6 +164,25 @@ local verification_train = {
                 type: "ref",
                 ref: "data_input"
             },
-        }
+        },
+        evaluation: {
+            type: "pipeline::evaluation",
+            data: {
+                type: "ref",
+                ref: "data_input"
+            },
+            sentence_results: {
+                type: "ref",
+                ref: "sentence_selection",
+            },
+            verified_results: {
+                type: "ref",
+                ref: "table_verification",
+            },
+            doc_results: {
+                type: "ref",
+                ref: "document_retrieval",
+            },
+        },
     },
 }
