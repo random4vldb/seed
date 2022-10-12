@@ -117,7 +117,14 @@ local verification_train = {
         data_input: {
             type: "pipeline::input_totto",
             input_file: "data/totto2/augmented/dev.jsonl",
-            size: 10
+            size: -1
+        },
+        table_linearization: {
+            type: "tapas::table_linearization",
+            data: {
+                type: "ref",
+                ref: "data_input",
+            },
         },
         document_retrieval: {
             type: "pipeline::document_retrieval",
@@ -146,8 +153,9 @@ local verification_train = {
             },
             data: {
                 type: "ref",
-                ref: "data_input"
+                ref: "table_linearization",
             },
+            batch_size: 2
         },
         table_verification: {
             type: "pipeline::table_verification",
@@ -162,8 +170,9 @@ local verification_train = {
             },
             data: {
                 type: "ref",
-                ref: "data_input"
+                ref: "table_linearization",
             },
+            batch_size: 2
         },
         evaluation: {
             type: "pipeline::evaluation",

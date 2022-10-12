@@ -87,7 +87,6 @@ class SentenceSelection(Step):
         scores = softmax(outputs[0], axis=1)[:, 1].tolist()
 
 
-
         # all_preds = []
         # for batch in dataloader:
         #     outputs = model(**batch)
@@ -211,6 +210,28 @@ class CellCorrection(Step):
         dataset = dataset.map(lambda x: tokenize(tokenizer, x), batch_size=1000, num_proc=4, remove_columns=["table", "sent"])
         dataset.set_format(type="torch")
 
+        results = []
+        for i, (example, result) in enumerate(zip(data, verified_results)):
+            table = pd.DataFrame(example["table"])
+            cells = zip(*example["highlighted_cells"])
+            cells = [list(x) for x in cells]
+            sub_table = table.iloc[cells[0], cells[1]].reset_index().astype(str)            
+            verified_result, sents = result
+            if verified_result == 1:
+                continue
+            for column in sub_table.columns:
+                for sent in sents:
+                    question = self.choose_question(sub_table, column)
+                    input_string = question + "\\n" + sent
+                    answer = self.run_model(model, tokenizer, input_string, temperature=0.9, num_return_sequences=1, num_beams=20)
+                    if jaro.jaro_winkler_metric(answer, sub_table[column][0]) > 0.8:
+                        continue
+                    else:
+                        results.append(sub_table[column][0])
+                        break
+                else:
+                    results.append(None)
+        return results
 
 
 @Step.register("pipeline::evaluation")
