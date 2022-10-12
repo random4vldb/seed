@@ -1,9 +1,6 @@
 import evaluate
 import torch
-import torch.nn.functional as F
 from tango.integrations.pytorch_lightning import LightningModule
-from torch.nn import ModuleDict
-from torchmetrics import Accuracy, F1Score, Precision, Recall
 from transformers import (
     AdamW,
     AutoConfig,
@@ -63,29 +60,19 @@ class Seed3Module(LightningModule):
             **batch
         )
 
-        preds = (
-            torch.log_softmax(outputs.logits, dim=1)
-        )
-        loss = F.nll_loss(preds, batch["labels"])
-        self.log("train_loss", loss, on_step=True, on_epoch=False)
-        return {"loss": loss, "preds": torch.argmax(preds, dim=1), "labels": batch["labels"]}
+        self.log("train_loss", outputs.loss, on_step=True, on_epoch=False)
+        return {"loss": outputs.loss, "preds": torch.argmax(outputs.logits, dim=1), "labels": batch["labels"]}
 
     def training_step_end(self, outputs):
-        preds = outputs["preds"]
-        labels = outputs["labels"]
-        return outputs["loss"].sum()
+        return outputs["loss"].mean()
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         outputs = self(
             **batch
         )
 
-        preds = (
-            torch.log_softmax(outputs.logits, dim=1)
-        )
-        loss = F.nll_loss(preds, batch["labels"])
-        self.log("val_loss", loss, on_step=True, on_epoch=False)
-        return {"loss": loss, "preds": torch.argmax(preds, dim=1), "labels": batch["labels"]}
+        self.log("val_loss", outputs.loss, on_step=True, on_epoch=False)
+        return {"loss": outputs.loss, "preds": torch.argmax(outputs.logits, dim=1), "labels": batch["labels"]}
 
 
     def validation_epoch_end(self, outputs):

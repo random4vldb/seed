@@ -1,55 +1,30 @@
-from transformers import AutoTokenizer
-from accelerate import Accelerator
-from tango import Format, JsonFormat, Step
-from transformers import AutoTokenizer
-from blingfire import text_to_sentences
-from typing import Optional
-import evaluate
-import pandas as pd
 import collections
-import json
+import datetime
+from typing import Optional
+
+import evaluate
+import numpy as np
+import pandas as pd
+from blingfire import text_to_sentences
+from datasets import Dataset
+from tango import Format, JsonFormat, Step
+from transformers import (
+    AutoTokenizer,
+    DataCollatorWithPadding,
+    Trainer,
+    TrainingArguments,
+)
+from scipy.special import softmax
 
 
-@Step.register("pipeline::table_verification")
-class TableVerification(Step):
-    DETERMINISTIC: bool = True
-    CACHEABLE: Optional[bool] = True
-    FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "0027"
-
-
-    def run(self, model, tokenizer, data, sentence_results):
-        tokenizer_type = tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer)
-
-        accelerator = Accelerator()
-
-        model, tokenizer= accelerator.prepare(model, tokenizer)
-
-        print("Data", len(data))
-        print("Sent", len(sentence_results))
-        verified_results = []
-        for i, (example, result) in enumerate(zip(data, sentence_results)):
-            for sent in result:
-                if "tapas" in tokenizer_type or "tapex" in tokenizer_type:
-                    table = pd.DataFrame(example["table"])
-                else:
-                    table = example["linearized_table"]
-                
-                inputs = tokenizer(table=table, queries=sent, return_tensors="pt", padding=True, truncation=True)
-
-                inputs = {k: v.cuda() for k, v in inputs.items()}
-
-                pred = model(**inputs).logits.argmax(dim=1).tolist()
-
-                if pred[0] == 1:
-                    verified_results.append(1)
-                    break
-            else:
-                verified_results.append(0)
-            print("Length", len(verified_results), i)
-
-        return verified_results
+def tokenize(tokenizer, tokenizer_type, x):
+    if "tapas" in tokenizer_type or "tapex" in tokenizer_type:
+        table = pd.DataFrame(x["table"]).astype(str)
+    else:
+        table = x["table"]
+    inputs = tokenizer(table, x["sent"], padding="max_length", truncation=True, max_length=512, return_tensors="pt")
+    inputs = {k: v.squeeze(0) for k, v in inputs.items()}
+    return inputs
 
 
 @Step.register("pipeline::sentence_selection")
@@ -57,44 +32,184 @@ class SentenceSelection(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "003"
+    VERSION: Optional[str] = "0052"
 
 
-    def run(self, model, tokenizer, data, doc_results):
+    def run(self, model, tokenizer, data, doc_results, batch_size):
         tokenizer_type = tokenizer
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_type)
 
-        all_preds = []
+        tables = []
+        sentences = []
+        ids = []
+    
+        for idx, (example, doc_result) in enumerate(list(zip(data, doc_results))[:10]):
 
-        if "tapas" in tokenizer_type or "tapex" in tokenizer_type:
-            queries = [pd.DataFrame(x['table']) for x in data]
-        else:
-            queries = [x['linearized_table'] for x in data]
-
-        accelerator = Accelerator()
-
-        model, tokenizer= accelerator.prepare(model, tokenizer)
-
-
-        for table, doc_result in zip(queries, doc_results):
-            preds = []
-            print(len(doc_result))
             for doc, score, title in doc_result:
                 for sent in text_to_sentences(doc).split("\n"):
-                    print(sent)
-                    inputs = tokenizer(table=table, queries=sent, return_tensors="pt", padding=True, truncation=True)
+                    if len(sent.split()) <= 4 or sent[-1] != ".": # Short sentences are mostly section titles. 
+                            continue
+                    if "tapas" in tokenizer_type or "tapex" in tokenizer_type:
+                        tables.append(example["table"])
+                    else:
+                        tables.append(example["linearized_table"])
+                    sentences.append(sent)
+                    ids.append(idx)
+        
 
-                    inputs = {k: v.cuda() for k, v in inputs.items()}
+        
+        training_args = TrainingArguments(
+            output_dir="models/sentence_selection",
+            per_device_train_batch_size=batch_size,
+            per_device_eval_batch_size=batch_size,
+            remove_unused_columns=False,
+            label_names=["label"],
+            eval_accumulation_steps=8,
+        )
 
-                    pred = model(**inputs).logits.argmax(dim=1).tolist()
+        dataset = Dataset.from_dict({"table": tables, "sent": sentences})
+        dataset = dataset.map(lambda x: tokenize(tokenizer, tokenizer_type, x), batch_size=32, remove_columns=["table", "sent"])
+        dataset.set_format(type="torch")
+        
 
-                    if pred[0] == 1:
-                        preds.append(doc)
-                    preds.append(doc)
+        collator = DataCollatorWithPadding(tokenizer)
 
-            all_preds.append(preds)
 
-        return all_preds
+        trainer = Trainer(
+            args=training_args,
+            model=model,
+            data_collator=collator,
+        )
+
+        outputs = trainer.predict(dataset).predictions
+
+        all_preds = np.argmax(outputs[0], axis=1).tolist()
+        scores = softmax(outputs[0], axis=1)[:, 1].tolist()
+
+
+
+        # all_preds = []
+        # for batch in dataloader:
+        #     outputs = model(**batch)
+        #     preds = outputs.logits.argmax(dim=1).tolist()
+        #     scores = outputs.logits.softmax(dim=1)[:, 1].tolist()
+        #     all_preds.extend(list(zip(preds, scores)))
+
+
+        idx = 0
+        sentence_results = [[] for _ in range(len(data))]
+        for (pred, sent, score, id) in zip(all_preds, sentences, scores, ids):
+            if pred == 1:
+                sentence_results[id].append((sent, score))
+        return sentence_results
+
+
+@Step.register("pipeline::table_verification")
+class TableVerification(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = JsonFormat()
+    VERSION: Optional[str] = "00311"
+
+
+    def run(self, model, tokenizer, data, sentence_results, batch_size=8):
+        tokenizer_type = tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+
+        tables = []
+        sentences = []
+        scores = []
+        ids = []
+        for i, (example, result) in enumerate(zip(data, sentence_results)):
+            for sent, score in result:
+                if "tapas" in tokenizer_type or "tapex" in tokenizer_type:
+                    tables.append(pd.DataFrame(example["table"]))
+                else:
+                    tables.append(example["linearized_table"])
+                
+                sentences.append(sent)
+                scores.append(score)
+                ids.append(i)
+        
+
+        training_args = TrainingArguments(
+            output_dir="models/sentence_selection",
+            per_device_train_batch_size=batch_size,
+            per_device_eval_batch_size=batch_size,
+            remove_unused_columns=False,
+            label_names=["label"],
+            eval_accumulation_steps=8,
+        )
+
+        dataset = Dataset.from_dict({"table": tables, "sent": sentences})
+        dataset = dataset.map(lambda x: tokenize(tokenizer, tokenizer_type, x), batch_size=32, remove_columns=["table", "sent"])
+        dataset.set_format(type="torch")
+        
+
+        collator = DataCollatorWithPadding(tokenizer)
+
+
+        trainer = Trainer(
+            args=training_args,
+            model=model,
+            data_collator=collator,
+        )
+
+        outputs = trainer.predict(dataset).predictions
+
+        all_preds = np.argmax(outputs[0], axis=1).tolist()
+        scores = softmax(outputs[0], axis=1)[:, 1].tolist()
+
+        verified_results = [(False, []) for _ in range(len(data))]
+
+        for (pred, sent, score, id) in zip(all_preds, sentences, scores, ids):
+            if pred == 1 and not verified_results[id]:
+                verified_results[id][0] = True
+                verified_results[id][1].append((sent, score))
+        return verified_results
+
+
+@Step.register("pipeline::cell_correction")
+class CellCorrection(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: bool = True
+    FORMAT: Format = JsonFormat()
+    VERSION: Optional[str] = "001"
+
+
+    def choose_question(self, table, column): 
+        if "date" in column.lower():
+            return "What is the date?"
+        if "time" in column.lower():
+            return "What time ?"
+        try:
+            datetime.strptime(table[column][0])
+            return "What is the date?"
+        except:
+            pass
+
+        return "What is the value of " + column + "?"
+        
+
+    def run(self, model, tokenizer, data, verified_results, batch_size=8):
+        tokenizer_type = tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+
+
+        tables = []
+        sentences = []
+        for i, (example, result) in enumerate(zip(data, verified_results)):
+            for sent in result:
+                if "tapas" in tokenizer_type or "tapex" in tokenizer_type:
+                    tables.append(pd.DataFrame(example["table"]))
+                else:
+                    tables.append(example["linearized_table"])
+                
+                sentences.append(sent)
+        
+        dataset = Dataset.from_dict({"table": tables, "sent": sentences})
+        dataset = dataset.map(lambda x: tokenize(tokenizer, x), batch_size=1000, num_proc=4, remove_columns=["table", "sent"])
+        dataset.set_format(type="torch")
 
 
 
@@ -125,7 +240,7 @@ class Evaluation(Step):
     def process_sentence_selection(self, data, sentence_results):
         
         for example, result in zip(data, sentence_results):
-            for sent in result:
+            for sent, score in result:
                 if self.jaccard_similarity(sent.split(), example["sentence"].split()) > 0.8:
                     yield 1, 1
                 else:
@@ -159,8 +274,11 @@ class Evaluation(Step):
 
         result = collections.defaultdict(dict)
 
-        for step, preds, labels in zip(["document_retrieval", "sentence_selection", "table_verification"], [doc_preds, sentence_preds, verified_results], [doc_labels, sentence_labels, [x["label"] for x in data]]):
+        for step, preds, labels in zip(["document_retrieval", "sentence_selection", "table_verification"], [doc_preds, sentence_preds, [x[0] for x in verified_results]], [doc_labels, sentence_labels, [x["label"] for x in data]]):
             for name, metric in self.step2name2metrics[step].items():
                 for metric_name, metric_value in metric.compute(predictions=preds, references=labels).items():
                     result[step][f"{name}_{metric_name}"] = str(metric_value)
         return result
+
+
+

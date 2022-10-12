@@ -1,6 +1,5 @@
-from typing import Optional
-
 import torch
+import torch.nn.functional as F
 from pytorch_lightning import LightningModule
 from tango.integrations.pytorch_lightning import LightningModule
 from torch.nn import ModuleDict
@@ -8,15 +7,13 @@ from torchmetrics import Accuracy, F1Score, Precision, Recall
 from transformers import (
     AdamW,
     AutoConfig,
-    AutoModelForSequenceClassification,
+    AutoModelForQuestionAnswering,
     get_linear_schedule_with_warmup,
 )
 
 
-@LightningModule.register("seed::sent_selection_model")
-class SentSelectModule(LightningModule):
-    VERSION: Optional[str] = "002"
-
+@LightningModule.register("seed::cell_correction_model")
+class CellCorrectionModule(LightningModule):
     def __init__(
         self,
         model_name_or_path: str,
@@ -32,7 +29,7 @@ class SentSelectModule(LightningModule):
         self.save_hyperparameters()
 
         self.config = AutoConfig.from_pretrained(model_name_or_path, num_labels=2)
-        self.model = AutoModelForSequenceClassification.from_pretrained(
+        self.model = AutoModelForQuestionAnswering.from_pretrained(
             model_name_or_path, config=self.config, ignore_mismatched_sizes=True
         )
 
@@ -68,20 +65,31 @@ class SentSelectModule(LightningModule):
         self.log("train_loss", outputs.loss, on_step=True, on_epoch=False)
         return {
             "loss": outputs.loss,
-            "preds": torch.argmax(outputs.logits, dim=1),
+            "preds": torch.argmax(preds, dim=1),
             "labels": batch["labels"],
         }
 
     def training_step_end(self, outputs):
-        return outputs["loss"].mean()
+        preds = outputs["preds"]
+        labels = outputs["labels"]
+        for name, metric in self.metrics["train_metrics"].items():
+            self.log(
+                f"train_{name}",
+                metric(preds, labels),
+                prog_bar=True,
+            )
+
+        return outputs["loss"].sum()
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         outputs = self(**batch)
 
-        self.log("val_loss", outputs.loss, on_step=True, on_epoch=False)
+        preds = torch.log_softmax(outputs.logits, dim=1)
+        loss = F.nll_loss(preds, batch["labels"])
+        self.log("val_loss", loss, on_step=True, on_epoch=False)
         return {
-            "loss": outputs.loss,
-            "preds": torch.argmax(outputs.logits, dim=1),
+            "loss": loss,
+            "preds": torch.argmax(preds, dim=1),
             "labels": batch["labels"],
         }
 
