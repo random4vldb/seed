@@ -15,14 +15,17 @@ from transformers import (
     TrainingArguments,
 )
 from scipy.special import softmax
+import jaro
 
 
 def tokenize(tokenizer, tokenizer_type, x):
     if "tapas" in tokenizer_type or "tapex" in tokenizer_type:
         table = pd.DataFrame(x["table"]).astype(str)
+        inputs = tokenizer(table, x["sent"], padding="max_length", truncation=True, max_length=512, return_tensors="pt")
     else:
         table = x["table"]
-    inputs = tokenizer(table, x["sent"], padding="max_length", truncation=True, max_length=512, return_tensors="pt")
+        inputs = tokenizer([(table, x["sent"])], padding="max_length", truncation=True, max_length=512, return_tensors="pt")
+
     inputs = {k: v.squeeze(0) for k, v in inputs.items()}
     return inputs
 
@@ -32,7 +35,7 @@ class SentenceSelection(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "0052"
+    VERSION: Optional[str] = "00597"
 
 
     def run(self, model, tokenizer, data, doc_results, batch_size):
@@ -43,7 +46,7 @@ class SentenceSelection(Step):
         sentences = []
         ids = []
     
-        for idx, (example, doc_result) in enumerate(list(zip(data, doc_results))[:10]):
+        for idx, (example, doc_result) in enumerate(list(zip(data, doc_results))[:1]):
 
             for doc, score, title in doc_result:
                 for sent in text_to_sentences(doc).split("\n"):
@@ -87,19 +90,13 @@ class SentenceSelection(Step):
         scores = softmax(outputs[0], axis=1)[:, 1].tolist()
 
 
-        # all_preds = []
-        # for batch in dataloader:
-        #     outputs = model(**batch)
-        #     preds = outputs.logits.argmax(dim=1).tolist()
-        #     scores = outputs.logits.softmax(dim=1)[:, 1].tolist()
-        #     all_preds.extend(list(zip(preds, scores)))
-
-
-        idx = 0
-        sentence_results = [[] for _ in range(len(data))]
+        assert len(ids) == len(all_preds) == len(scores) == len(sentences)
+        sentence_results = [[[],[], []] for _ in range(100)]
         for (pred, sent, score, id) in zip(all_preds, sentences, scores, ids):
             if pred == 1:
-                sentence_results[id].append((sent, score))
+                sentence_results[id][0].append((sent, score))
+            sentence_results[id][1].append((sent, pred))
+            sentence_results[id][2] = (data[id]["linearized_table"], data[id]["sentence"])
         return sentence_results
 
 
@@ -108,16 +105,17 @@ class TableVerification(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "00311"
+    VERSION: Optional[str] = "00383"
 
 
     def run(self, model, tokenizer, data, sentence_results, batch_size=8):
         tokenizer_type = tokenizer
         tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+        sentence_results = [x[0] for x in sentence_results]
 
         tables = []
         sentences = []
-        scores = []
+        sent_scores = []
         ids = []
         for i, (example, result) in enumerate(zip(data, sentence_results)):
             for sent, score in result:
@@ -127,10 +125,9 @@ class TableVerification(Step):
                     tables.append(example["linearized_table"])
                 
                 sentences.append(sent)
-                scores.append(score)
+                sent_scores.append(score)
                 ids.append(i)
         
-
         training_args = TrainingArguments(
             output_dir="models/sentence_selection",
             per_device_train_batch_size=batch_size,
@@ -140,6 +137,7 @@ class TableVerification(Step):
             eval_accumulation_steps=8,
         )
 
+        print(tables)
         dataset = Dataset.from_dict({"table": tables, "sent": sentences})
         dataset = dataset.map(lambda x: tokenize(tokenizer, tokenizer_type, x), batch_size=32, remove_columns=["table", "sent"])
         dataset.set_format(type="torch")
@@ -159,12 +157,13 @@ class TableVerification(Step):
         all_preds = np.argmax(outputs[0], axis=1).tolist()
         scores = softmax(outputs[0], axis=1)[:, 1].tolist()
 
-        verified_results = [(False, []) for _ in range(len(data))]
+        verified_results = [[False, []] for _ in range(len(sentence_results))]
 
         for (pred, sent, score, id) in zip(all_preds, sentences, scores, ids):
-            if pred == 1 and not verified_results[id]:
+            print(pred, sent, score, id)
+            if pred == 1:
                 verified_results[id][0] = True
-                verified_results[id][1].append((sent, score))
+            verified_results[id][1].append((sent, score, data[id]["linearized_table"], data[id]["sentence"], data[id]["label"]))
         return verified_results
 
 
@@ -239,7 +238,7 @@ class Evaluation(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "00497"
+    VERSION: Optional[str] = "00499"
 
     step2name2metrics = {
         x : {
@@ -259,13 +258,16 @@ class Evaluation(Step):
         return len(set(list1).intersection(set(list2))) / len(set(list1).union(set(list2)))
 
     def process_sentence_selection(self, data, sentence_results):
-        
+        preds = []
+        labels = []
         for example, result in zip(data, sentence_results):
-            for sent, score in result:
+            for sent, pred in result:
                 if self.jaccard_similarity(sent.split(), example["sentence"].split()) > 0.8:
-                    yield 1, 1
+                    labels.append(1)
                 else:
-                    yield 0, 1
+                    labels.append(0)
+                preds.append(pred)
+        return preds, labels
 
     def process_document_retrieval(self, data, doc_results):
         preds = []
@@ -290,12 +292,13 @@ class Evaluation(Step):
         return [pd.DataFrame(preds).to_dict(orient="list")], [pd.DataFrame(labels).to_dict(orient="list")]
 
     def run(self, data, doc_results, sentence_results, verified_results):
+        sentence_results = [x[1] for x in sentence_results]
         doc_preds, doc_labels = self.process_document_retrieval(data, doc_results)
-        sentence_preds, sentence_labels = zip(*self.process_sentence_selection(data, sentence_results))
+        sentence_preds, sentence_labels = self.process_sentence_selection(data, sentence_results)
 
         result = collections.defaultdict(dict)
 
-        for step, preds, labels in zip(["document_retrieval", "sentence_selection", "table_verification"], [doc_preds, sentence_preds, [x[0] for x in verified_results]], [doc_labels, sentence_labels, [x["label"] for x in data]]):
+        for step, preds, labels in zip(["document_retrieval", "sentence_selection", "table_verification"], [doc_preds, sentence_preds, [x[0] for x in verified_results]], [doc_labels, sentence_labels, [x["label"] for x in data][:len(verified_results)]]):
             for name, metric in self.step2name2metrics[step].items():
                 for metric_name, metric_value in metric.compute(predictions=preds, references=labels).items():
                     result[step][f"{name}_{metric_name}"] = str(metric_value)

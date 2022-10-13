@@ -10,12 +10,11 @@ from transformers import (
 
 
 @LightningModule.register("seed::verification_model")
-
-class Seed3Module(LightningModule):
+class VerificationModule(LightningModule):
     def __init__(
         self,
         model_name_or_path: str,
-        learning_rate: float = 2e-5,
+        learning_rate: float = 1e-5,
         adam_epsilon: float = 1e-8,
         warmup_steps: int = 0,
         weight_decay: float = 0.0,
@@ -64,7 +63,8 @@ class Seed3Module(LightningModule):
         return {"loss": outputs.loss, "preds": torch.argmax(outputs.logits, dim=1), "labels": batch["labels"]}
 
     def training_step_end(self, outputs):
-        return outputs["loss"].mean()
+        self.log("train_loss", outputs["loss"], prog_bar=True)
+        return outputs["loss"].sum()
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         outputs = self(

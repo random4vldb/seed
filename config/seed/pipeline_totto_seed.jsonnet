@@ -39,14 +39,14 @@ local verification_train = {
             "model_name_or_path": "facebook/bart-large"
         },
         "trainer": lib.trainer(name="verification") + {
-            max_epochs: 10
+            max_epochs: 5
         },
         "datamodule":{
             "type": "seed::verification_data",
             "tokenizer": "facebook/bart-large",
             "dataset_name_or_path": "data/totto2/triplets",
-            "train_batch_size": 8,
-            "eval_batch_size": 8
+            "train_batch_size": 4,
+            "eval_batch_size": 4
         }
     },
     convert_verification: {
@@ -99,7 +99,7 @@ local verification_train = {
                 type: "ref",
                 ref: "data_input"
             },
-            batch_size: 16
+            batch_size: 15
         },
         table_verification: {
             type: "pipeline::table_verification",

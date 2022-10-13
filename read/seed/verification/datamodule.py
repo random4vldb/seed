@@ -6,12 +6,12 @@ from tango.integrations.pytorch_lightning import LightningDataModule
 
 
 @LightningDataModule.register("seed::verification_data")
-class Seed3DataModule(LightningDataModule):
+class VerificationModule(LightningDataModule):
     def __init__(
         self,
         tokenizer: str,
         dataset_name_or_path: str,
-        max_seq_length: int = 256,
+        max_seq_length: int = 512,
         train_batch_size: int = 32,
         eval_batch_size: int = 32,
         **kwargs,
@@ -38,7 +38,6 @@ class Seed3DataModule(LightningDataModule):
             self.convert_to_features,
             batched=True,
             remove_columns=remove_columns,
-            num_proc=20,
         )
 
         for split in self.dataset.keys():
@@ -66,36 +65,6 @@ class Seed3DataModule(LightningDataModule):
             num_workers=4,
         )
 
-    def convert_to_test_features(self, example_batch):
-        texts_or_text_pairs = (
-            list(
-                zip(
-                    example_batch["positive"],
-                    example_batch["sentence"],
-                )
-            ),
-            list(
-                zip(
-                    example_batch["negative"],
-                    example_batch["sentence"],
-                )
-            ),
-        )
-
-        # Tokenize the text/text pairs
-        assert len(texts_or_text_pairs[0]) == len(texts_or_text_pairs[1])
-        features = self.tokenizer(
-            texts_or_text_pairs[0] + texts_or_text_pairs[1],
-            max_length=self.max_seq_length,
-            padding="max_length",
-            truncation="only_first",
-        )
-
-        features["labels"] = [1] * len(texts_or_text_pairs[0]) + [0] * len(
-            texts_or_text_pairs[1]
-        )
-
-        return features
 
     def convert_to_features(self, example_batch, indices=None):
         # Either encode single sentence or sentence pairs
@@ -114,6 +83,8 @@ class Seed3DataModule(LightningDataModule):
             ),
         )
 
+        print(texts_or_text_pairs)
+
         # Tokenize the text/text pairs
         assert len(texts_or_text_pairs[0]) == len(texts_or_text_pairs[1])
         inputs = self.tokenizer(
@@ -122,9 +93,5 @@ class Seed3DataModule(LightningDataModule):
             padding="max_length",
             truncation="only_first",
         )
-        # result = {}
-        # for key in positives.data.keys():
-        #     result[f"positive_{key}"] = positives[key][: len(texts_or_text_pairs[0])]
-        #     result[f"negative_{key}"] = positives[key][len(texts_or_text_pairs[0]) :]
         inputs["labels"] = [1] * len(texts_or_text_pairs[0]) + [0] * len(texts_or_text_pairs[1])
         return inputs
