@@ -4,9 +4,10 @@ from datasets import load_dataset
 import pandas as pd
 import json
 from tango.common.dataset_dict import DatasetDict
+from transformers import AutoTokenizer
 
 
-def sub_table(table, highlighted_cells, note):
+def sub_table(table, highlighted_cells, note=None):
     table = pd.DataFrame(json.loads(table))
     if note is not None:
         replacing_value, replaced_value, row, column = json.loads(note)
@@ -92,7 +93,8 @@ def tokenize_verification(batch, tokenizer):
 
 @Step.register("tapex::input_data")
 class TapexInputData(Step):
-    def run(self, train_file, dev_file, tokenizer, task):
+    def run(self, train_file, dev_file, tokenizer, task="sent_selection"):
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer)
         datasets = load_dataset(
             "json", data_files={"train": train_file, "dev": dev_file}
         )

@@ -2,8 +2,8 @@ local lib = import '../seed/trainer.libsonnet';
 
 local sent_selection_train = {
     read_data_sent_selection: {
-        type: "tapas::input_data",
-        tokenizer: "google/tapas-base",
+        type: "tapex::input_data",
+        tokenizer: "microsoft/tapex-base",
         train_file: "temp/seed/sent_selection/data/train.jsonl",
         dev_file: "temp/seed/sent_selection/data/dev.jsonl"
     },
@@ -11,7 +11,7 @@ local sent_selection_train = {
         type: "torch::train",
         model: {
             type: "transformers::AutoModelForSequenceClassification::from_pretrained",
-            pretrained_model_name_or_path: "google/tapas-base",
+            pretrained_model_name_or_path: "microsoft/tapex-base",
         },
         training_engine: {
             optimizer: {
@@ -25,24 +25,24 @@ local sent_selection_train = {
             "ref": "read_data_sent_selection",
         },
         train_dataloader: {
-            batch_size: 16,
+            batch_size: 4,
             shuffle: true,
             collate_fn: {
                 type: "transformers::DataCollatorWithPadding",
                 tokenizer: {
-                    pretrained_model_name_or_path: "google/tapas-base",  
+                    pretrained_model_name_or_path: "microsoft/tapex-base",  
                 },
             },
         },
-        validation_split: "validation",
+        validation_split: "dev",
         validation_dataloader: {
-            batch_size: 16,
+            batch_size: 4,
             shuffle: false
         },
         device_count: 8
     },
-    eval_sent_selection: {
-        type: "eval::classification",
+    eval: {
+        type: "classification_score",
         model: {
             type: "ref",
             ref: "train_sent_selection",
@@ -51,15 +51,15 @@ local sent_selection_train = {
             "type": "ref",
             "ref": "read_data_sent_selection",
         },
-        test_split: "validation",
-        batch_size: 16
+        test_split: "dev",
+        batch_size: 4
     },
 };
 
 local verification_train = {
     read_data_verification: {
-        type: "tapas::input_data",
-        tokenizer: "google/tapas-base",
+        type: "tapex::input_data",
+        tokenizer: "microsoft/tapex-base",
         task: "verification",
         train_file: "data/totto2/triplets/train.jsonl",
         dev_file: "data/totto2/triplets/dev.jsonl"
@@ -68,7 +68,7 @@ local verification_train = {
         type: "torch::train",
         model: {
             type: "transformers::AutoModelForSequenceClassification::from_pretrained",
-            pretrained_model_name_or_path: "google/tapas-base",
+            pretrained_model_name_or_path: "microsoft/tapex-base",
         },
         training_engine: {
             optimizer: {
@@ -87,17 +87,17 @@ local verification_train = {
             collate_fn: {
                 type: "transformers::DataCollatorWithPadding",
                 tokenizer: {
-                    pretrained_model_name_or_path: "google/tapas-base",  
+                    pretrained_model_name_or_path: "microsoft/tapex-base",  
                 },
             },
         },
-        validation_split: "validation",
+        validation_split: "dev",
         validation_dataloader: {
             batch_size: 4,
             shuffle: false
         },
     },
-    eval_verification: {
+    eval: {
         type: "eval::classification",
         model: {
             type: "ref",
@@ -107,7 +107,7 @@ local verification_train = {
             "type": "ref",
             "ref": "read_data_verification",
         },
-        test_split: "validation",
+        test_split: "dev",
         batch_size: 4
     },
 };

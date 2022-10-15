@@ -1,14 +1,14 @@
 local lib = import 'infotab_train.libsonnet';
 
-local sent_selection_train = lib.trainer("temp/infotab/sent_selection/data/");
-local verification_train = lib.trainer("data/totto2/triplets/");
+local sent_selection_train = lib.trainer("sent_selection", "temp/seed/sent_selection/data/");
+local verification_train = lib.trainer("verification", "data/totto2/triplets/");
 
 {
     steps: sent_selection_train + verification_train + {
         data_input: {
             type: "pipeline::input_totto",
             input_file: "data/totto2/augmented/dev.jsonl",
-            size: 100
+            size: -1
         },
         document_retrieval: {
             type: "pipeline::document_retrieval",
@@ -39,6 +39,7 @@ local verification_train = lib.trainer("data/totto2/triplets/");
                 type: "ref",
                 ref: "data_input"
             },
+            batch_size: 12
         },
         table_verification: {
             type: "pipeline::table_verification",

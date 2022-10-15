@@ -190,9 +190,9 @@ class InfoTabJsonToPara(Step):
                     "hypothesis": row["hypothesis"],
                     "label": label,
                 }
-                print(obj)
                 result.append(obj)
             dataset_dict[split] = result
+        print(dataset_dict.keys())
         return dataset_dict
 
 
@@ -200,7 +200,7 @@ class InfoTabJsonToPara(Step):
 class InfoTabPreprocess(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = True
-    VERSION: Optional[str] = "005"
+    VERSION: Optional[str] = "0051"
 
     def run(self, dataset_dict, tokenizer, single_sentence):
         tokenizer = AutoTokenizer.from_pretrained(tokenizer)
@@ -253,9 +253,6 @@ class InfoTabPreprocess(Step):
                     }
                 )
 
-                if (samples_processed % 100) == 0:
-                    print("{} examples processed".format(samples_processed))
-
             print("Preprocessing Finished")
             dataset_dict[split] = examples
         return DatasetDict(dataset_dict)
@@ -294,42 +291,86 @@ class InfoTabInputData(Step):
 class InfoTabInputFromTotto(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = False
-    VERSION = "005241"
+    VERSION = "00791"
 
-    def run(self, input_dir):
-        split2examples = collections.defaultdict(list)
+    def run(self, input_dir, task):
         idx = 0
-        for input_file in Path(input_dir).glob("*.jsonl"):
-            with jsonlines.open(input_file) as reader:
-                for obj in list(reader)[:100]:
-                    split2examples[input_file.stem].append(
-                        {
+        if task == "verification":
+            split2examples = collections.defaultdict(list)
+            print(input_dir)
+            for input_file in Path(input_dir).glob("*.jsonl"):
+                print(input_file)
+                with jsonlines.open(input_file, "r") as reader:
+                    for obj in list(reader):
+                        split2examples[input_file.stem].append(
+                            {
+                                "table_id": idx,
+                                "annotator_id": idx,
+                                "hypothesis": obj["sentence"],
+                                "label": 1,
+                                "table": obj["positive_table"],
+                                "title": obj["title"],
+                                "highlighted_cells": obj["highlighted_cells"],
+                            }
+                        )
+                        negative_table = pd.DataFrame(json.loads(obj["negative_table"]))
+                        replacing_value, replaced_value, row, column = json.loads(
+                            obj["note"]
+                        )
+                        negative_table.iloc[row, column] = replacing_value
+                        split2examples[input_file.stem].append(
+                            {
+                                "table_id": idx + 1,
+                                "annotator_id": idx + 1,
+                                "hypothesis": obj["sentence"],
+                                "label": 0,
+                                "table": negative_table.to_json(orient="records"),
+                                "title": obj["title"],
+                                "highlighted_cells": obj["highlighted_cells"],
+                            }
+                        )
+                    idx += 2
+            print({k: len(v) for k, v in split2examples.items()})
+            return split2examples
+        else:
+            split2examples = collections.defaultdict(list)
+            print(input_dir)
+            for input_file in Path(input_dir).glob("*.jsonl"):
+                print(input_file)
+                with jsonlines.open(input_file, "r") as reader:
+                    idx = 0
+                    for jobj in reader:
+                        print(jobj.keys())
+
+                        example = {
                             "table_id": idx,
                             "annotator_id": idx,
-                            "hypothesis": obj["sentence"],
+                            "hypothesis": jobj["positive"],
+                            "table": jobj["table"],
                             "label": 1,
-                            "table": obj["positive_table"],
-                            "title": obj["title"],
-                            "highlighted_cells": obj["highlighted_cells"],
+                            "title": jobj["table_page_title"]
+                            if "table_page_title" in jobj
+                            else jobj["title"],
+                            "highlighted_cells": jobj["highlighted_cells"]
                         }
-                    )
-                    negative_table = pd.DataFrame(json.loads(obj["negative_table"]))
-                    replacing_value, replaced_value, row, column = json.loads(
-                        obj["note"]
-                    )
-                    negative_table.iloc[row, column] = replacing_value
-                    split2examples[input_file.stem].append(
-                        {
-                            "table_id": idx + 1,
-                            "annotator_id": idx + 1,
-                            "hypothesis": obj["sentence"],
+                        idx += 1
+                        split2examples[input_file.stem].append(example)
+
+                        example = {
+                            "table_id": idx,
+                            "annotator_id": idx,
+                            "hypothesis": jobj["negative"],
+                            "table": jobj["table"],
                             "label": 0,
-                            "table": negative_table.to_json(orient="records"),
-                            "title": obj["title"],
-                            "highlighted_cells": obj["highlighted_cells"],
+                            "title": jobj["table_page_title"]
+                            if "table_page_title" in jobj
+                            else jobj["title"],
+                            "highlighted_cells": jobj["highlighted_cells"]
                         }
-                    )
-                idx += 2
-        # for key in split2examples:
-        #     random.shuffle(split2examples[key])
-        return split2examples
+                        idx += 1
+
+                        split2examples[input_file.stem].append(example)
+
+                logger.info("Num examples", len(split2examples[input_file.stem]))
+            print({k: len(v) for k, v in split2examples.items()})
+            return split2examples
