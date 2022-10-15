@@ -1,10 +1,13 @@
 from tango import Step, JsonFormat, Format
 from typing import Optional
-from typing import List
 
 
 @Step.register("infotab::pipeline_preprocess")
 class InfotabPipelinePreProcess(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = JsonFormat()
+
     def run(self, data, doc_results):
         examples = []
         for idx, (example, doc_result) in enumerate(zip(data, doc_results)):
@@ -24,6 +27,9 @@ class InfotabPipelinePreProcess(Step):
 
 @Step.register("infotab::pipeline_postprocess")
 class InfotabPipelinePostProcess(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = JsonFormat()
 
     def run(self, results):
         id2results = {}
@@ -42,3 +48,20 @@ class InfotabPipelinePostProcess(Step):
             final_results[idx] = id2results[idx]
         
         return final_results
+
+
+
+@Step.register("infotab::document_retrieval")
+class InfotabSentenceSelection(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = JsonFormat()
+
+    def run(self, data, sentence_results):
+        for example, sentence_result in zip(data, sentence_results):
+            for doc, score, title in sentence_result:
+                if title == example["title"]:
+                    example["doc"] = doc
+                    example["score"] = score
+                    break
+        

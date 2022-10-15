@@ -16,7 +16,7 @@ from loguru import logger
 from tango import Step, Format, JsonFormat
 from typing import Optional
 from kilt.knowledge_source import KnowledgeSource
-
+from blingfire import text_to_sentences
 
 
 class DPRSearcher:
@@ -238,7 +238,7 @@ class DocumentRetrieval(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "003"
+    VERSION: Optional[str] = "004"
 
     @staticmethod
     def init_searcher(searcher, faiss_index, lucene_index, qry_encoder, ctx_encoder):
@@ -295,7 +295,9 @@ class DocumentRetrieval(Step):
                 for passage in page["text"]:
                     if "::::" in passage:
                         continue
-                    
-                    doc_result.append((passage, hit["score"].item(), hit["title"]))
+                    for sent in text_to_sentences(passage).split("\n"):
+                        if len(sent.split()) <= 4 or sent[-1] != ".": # Short sentences are mostly section titles. 
+                                continue
+                        doc_result.append((sent, hit["score"].item(), hit["title"]))
             doc_results.append(doc_result)
         return doc_results

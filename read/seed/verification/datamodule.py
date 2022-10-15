@@ -6,7 +6,7 @@ from tango.integrations.pytorch_lightning import LightningDataModule
 
 
 @LightningDataModule.register("seed::verification_data")
-class VerificationModule(LightningDataModule):
+class VerificationDataModule(LightningDataModule):
     def __init__(
         self,
         tokenizer: str,
@@ -82,8 +82,6 @@ class VerificationModule(LightningDataModule):
                 )
             ),
         )
-
-        print(texts_or_text_pairs)
 
         # Tokenize the text/text pairs
         assert len(texts_or_text_pairs[0]) == len(texts_or_text_pairs[1])

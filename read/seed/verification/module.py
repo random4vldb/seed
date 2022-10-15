@@ -63,7 +63,16 @@ class VerificationModule(LightningModule):
         return {"loss": outputs.loss, "preds": torch.argmax(outputs.logits, dim=1), "labels": batch["labels"]}
 
     def training_step_end(self, outputs):
+        preds = outputs["preds"]
+        labels = outputs["labels"]
         self.log("train_loss", outputs["loss"], prog_bar=True)
+        for name, metric in self.metrics["train_metrics"].items():
+            self.log(
+                f"train_{name}",
+                metric.compute(predictions=preds, references=labels),
+                prog_bar=True,
+                on_epoch=True,
+            )
         return outputs["loss"].sum()
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):

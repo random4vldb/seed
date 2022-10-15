@@ -99,7 +99,7 @@ local verification_train = {
                 type: "ref",
                 ref: "data_input"
             },
-            batch_size: 15
+            batch_size: 12
         },
         table_verification: {
             type: "pipeline::table_verification",
