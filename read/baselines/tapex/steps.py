@@ -1,8 +1,11 @@
-from tango import Step
+from tango import Step, Format, JsonFormat
 from datasets import load_dataset
 import pandas as pd
 import json
 from transformers import AutoTokenizer
+from typing import Optional
+from tango.integrations.datasets import DatasetsFormat
+
 
 
 def sub_table(table, highlighted_cells, note=None):
@@ -91,6 +94,13 @@ def tokenize_verification(batch, tokenizer):
 
 @Step.register("tapex::input_data")
 class TapexInputData(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = DatasetsFormat()
+    VERSION: Optional[str] = "0023"
+    
+
+
     def run(self, train_file, dev_file, tokenizer, task="sent_selection"):
         tokenizer = AutoTokenizer.from_pretrained(tokenizer)
         datasets = load_dataset(

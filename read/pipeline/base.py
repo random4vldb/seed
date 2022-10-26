@@ -182,8 +182,8 @@ class TableVerification(Step):
 
         outputs = trainer.predict(dataset).predictions
 
-        all_preds = np.argmax(outputs[0], axis=1).tolist()
-        scores = softmax(outputs[0], axis=1)[:, 1].tolist()
+        all_preds = np.argmax(outputs, axis=1).tolist()
+        scores = softmax(outputs, axis=1)[:, 1].tolist()
 
         verified_results = [[False, []] for _ in range(len(sentence_results))]
 

@@ -19,13 +19,13 @@ local sent_selection_train = {
                 lr: 1e-5,
             },
         },
-        train_epochs: 5,
+        train_epochs: 2,
         dataset_dict: {
             "type": "ref",
             "ref": "read_data_sent_selection",
         },
         train_dataloader: {
-            batch_size: 4,
+            batch_size: 1,
             shuffle: true,
             collate_fn: {
                 type: "transformers::DataCollatorWithPadding",
@@ -33,10 +33,11 @@ local sent_selection_train = {
                     pretrained_model_name_or_path: "microsoft/tapex-base",  
                 },
             },
+            num_workers: 8
         },
         validation_split: "dev",
         validation_dataloader: {
-            batch_size: 4,
+            batch_size: 1,
             shuffle: false
         },
         device_count: 8
@@ -76,13 +77,13 @@ local verification_train = {
                 lr: 1e-5,
             },
         },
-        train_epochs: 5,
+        train_epochs: 2,
         dataset_dict: {
             "type": "ref",
             "ref": "read_data_verification",
         },
         train_dataloader: {
-            batch_size: 4,
+            batch_size: 1,
             shuffle: true,
             collate_fn: {
                 type: "transformers::DataCollatorWithPadding",
@@ -90,12 +91,14 @@ local verification_train = {
                     pretrained_model_name_or_path: "microsoft/tapex-base",  
                 },
             },
+            num_workers: 12
         },
         validation_split: "dev",
         validation_dataloader: {
-            batch_size: 4,
+            batch_size: 2,
             shuffle: false
         },
+        device_count: 8
     },
     eval: {
         type: "eval::classification",
@@ -146,7 +149,7 @@ local verification_train = {
                 type: "ref",
                 ref: "train_sent_selection"
             },
-            tokenizer: "google/tapas-base",
+            tokenizer: "microsoft/tapex-base",
             doc_results: {
                 type: "ref",
                 ref: "document_retrieval",

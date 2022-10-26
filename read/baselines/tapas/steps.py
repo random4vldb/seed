@@ -4,6 +4,8 @@ from tango import Step
 from tango.common.dataset_dict import DatasetDict
 import pandas as pd
 from transformers import TapasTokenizer
+from typing import Optional
+
 
 class SentSelectionDataset(torch.utils.data.Dataset):
     def __init__(self, df, tokenizer):
@@ -17,7 +19,8 @@ class SentSelectionDataset(torch.utils.data.Dataset):
         table = pd.DataFrame(json.loads(item["table"]))
         cells = zip(*item["highlighted_cells"])
         cells = [list(x) for x in cells]
-        sub_table = table.iloc[cells[0], cells[1]].reset_index().astype(str)
+        sub_table = table.iloc[cells[0], cells[1]].drop_duplicates().reset_index().astype(str)
+        sub_table = sub_table.iloc[:,~sub_table.columns.duplicated()]
 
         if ex_id == 0:
             encoding = self.tokenizer(
@@ -65,7 +68,8 @@ class VerificationDataset(torch.utils.data.Dataset):
             
         cells = zip(*item["highlighted_cells"])
         cells = [list(x) for x in cells]
-        sub_table = table.iloc[cells[0], cells[1]].reset_index().astype(str)
+        sub_table = table.iloc[cells[0], cells[1]].drop_duplicates().reset_index().astype(str)
+        sub_table = sub_table.iloc[:,~sub_table.columns.duplicated()]
 
 
         encoding = self.tokenizer(table=sub_table, 
@@ -90,6 +94,7 @@ class VerificationDataset(torch.utils.data.Dataset):
 class TapasInputData(Step):
     DETERMINISTIC = True
     CACHEABLE = True
+    VERSION: Optional[str] = "0024"
 
     def run(self, tokenizer, train_file, dev_file, task="sent_selection") -> DatasetDict:
         tokenizer = TapasTokenizer.from_pretrained(tokenizer, max_question_length=256)

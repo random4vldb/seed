@@ -5,7 +5,8 @@ local sent_selection_train = {
         type: "tapas::input_data",
         tokenizer: "google/tapas-base",
         train_file: "temp/seed/sent_selection/data/train.jsonl",
-        dev_file: "temp/seed/sent_selection/data/dev.jsonl"
+        dev_file: "temp/seed/sent_selection/data/dev.jsonl",
+        task: "sent_selection"
     },
     train_sent_selection: {
         type: "torch::train",
@@ -25,7 +26,7 @@ local sent_selection_train = {
             "ref": "read_data_sent_selection",
         },
         train_dataloader: {
-            batch_size: 16,
+            batch_size: 2,
             shuffle: true,
             collate_fn: {
                 type: "transformers::DataCollatorWithPadding",
@@ -36,7 +37,7 @@ local sent_selection_train = {
         },
         validation_split: "validation",
         validation_dataloader: {
-            batch_size: 16,
+            batch_size: 2,
             shuffle: false
         },
         device_count: 8
@@ -52,7 +53,7 @@ local sent_selection_train = {
             "ref": "read_data_sent_selection",
         },
         test_split: "validation",
-        batch_size: 16
+        batch_size: 1
     },
 };
 
@@ -82,7 +83,7 @@ local verification_train = {
             "ref": "read_data_verification",
         },
         train_dataloader: {
-            batch_size: 4,
+            batch_size: 2,
             shuffle: true,
             collate_fn: {
                 type: "transformers::DataCollatorWithPadding",
@@ -93,7 +94,7 @@ local verification_train = {
         },
         validation_split: "validation",
         validation_dataloader: {
-            batch_size: 4,
+            batch_size: 2,
             shuffle: false
         },
     },
@@ -108,7 +109,7 @@ local verification_train = {
             "ref": "read_data_verification",
         },
         test_split: "validation",
-        batch_size: 4
+        batch_size: 2
     },
 };
 
