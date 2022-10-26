@@ -42,9 +42,14 @@ class InfotabModel(Model):
 
         outputs = self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
         outputs = self.classifier(outputs[1])
-        loss = loss_fn(outputs, labels)
-        predictions = torch.argmax(outputs, dim=1)
-        return {"loss": loss, "predictions": predictions, "labels": labels}
+        if labels is not None:
+            loss = loss_fn(outputs, labels)
+            predictions = torch.argmax(outputs, dim=1)
+            return {"loss": loss, "predictions": predictions, "labels": labels, "outputs": outputs}
+        else:
+            predictions = torch.argmax(outputs, dim=1)
+            return {"predictions": predictions, "outputs": outputs}
+
     
 
 

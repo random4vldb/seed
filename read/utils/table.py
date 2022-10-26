@@ -1,7 +1,5 @@
-import copy
 import pandas as pd
 import json
-import six
 
 
 def linearize(
@@ -75,6 +73,7 @@ def infotab2totto(example):
     table_str = ""
     table_str += "<page_title> " + example["title"] + " </page_title> "
     table_str += "<table> "
+
 
     table = pd.DataFrame(json.loads(example["table"]))
 

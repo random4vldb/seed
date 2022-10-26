@@ -221,7 +221,7 @@ class HybridSearcher:
         for example in examples:
             table = pd.DataFrame(example["table"])
             query = " ".join(
-                [table.iloc[i, j] for i, j in example["highlighted_cells"]]
+                [" ".join(table.iloc[i, j]) if isinstance(table.iloc[i, j], list) else table.iloc[i, j] for i, j in example["highlighted_cells"]]
             )
             query = example["title"] + " " + example["title"] + " " + query
             queries.append(query)

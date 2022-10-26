@@ -66,133 +66,11 @@ class InfoTabJsonToPara(Step):
                     row["table_id"] = random_mapping_tableids[table_id]
 
             for index, row in enumerate(data):
-                if isinstance(row["table"], str):
-                    row["table"] = json.loads(row["table"])
-                table = pd.DataFrame(row["table"]).astype(str)
-                obj = collections.defaultdict(list)
-                if row["highlighted_cells"]:
-                    for i, j in row["highlighted_cells"]:
-                        obj[f"{table.columns[j]}"].append(table.iloc[i, j])
-                else:
-                    for i in range(table.shape[0]):
-                        for j in range(table.shape[1]):
-                            obj[f"{table.columns[j]}"].append(table.iloc[i, j])
-
-                if not obj:
+                obj = infotab_linearize(index, row)
+                if obj is None:
                     continue
-                obj = {x: y if isinstance(y, list) else [y] for x, y in obj.items()}
-                
-                try:
-                    title = row["title"]
-                except KeyError as e:
-                    logger.error(f"KeyError: {e}")
-                    exit()
-
-                para = ""
-
-                if "index" in obj:
-                    obj.pop("index")
-
-                for key in obj:
-                    line = ""
-                    values = obj[key]
-
-                    if not key.strip():
-                        key = "value"
-                    key = key.replace(" of ", " ")
-                    key = key.replace(
-                        " A ", " AB "
-                    )  # This is a hack to for inflect to work properly
-                    try:
-                        res = inflect.plural_noun(key)
-                    except:
-                        res = None
-                    if (len(values) > 1) and res is not None:
-                        verb_use = "are"
-                        if is_date("".join(values)):
-                            para += title + " was " + str(key) + " on "
-                            line += title + " was " + str(key) + " on "
-                        else:
-                            try:
-                                para += (
-                                    "The "
-                                    + str(key)
-                                    + " of "
-                                    + title
-                                    + " "
-                                    + verb_use
-                                    + " "
-                                )
-                                line += (
-                                    "The "
-                                    + str(key)
-                                    + " of "
-                                    + title
-                                    + " "
-                                    + verb_use
-                                    + " "
-                                )
-                            except TypeError as e:
-                                logger.error(
-                                    "Error in key: %s in article of title %s",
-                                    key,
-                                    title,
-                                )
-                                exit()
-                        for value in values[:-1]:
-                            para += value + ", "
-                            line += value + ", "
-                        if len(values) > 1:
-                            para += "and " + values[-1] + ". "
-                            line += "and " + values[-1] + ". "
-                        else:
-                            para += values[-1] + ". "
-                            line += values[-1] + ". "
-                    else:
-                        verb_use = "is"
-                        if is_date(values[0]):
-                            para += (
-                                title + " was " + str(key) + " on " + values[0] + ". "
-                            )
-                            line += (
-                                title + " was " + str(key) + " on " + values[0] + ". "
-                            )
-                        else:
-                            para += (
-                                "The "
-                                + str(key)
-                                + " of "
-                                + title
-                                + " "
-                                + verb_use
-                                + " "
-                                + values[0]
-                                + ". "
-                            )
-                            line += (
-                                "The "
-                                + str(key)
-                                + " of "
-                                + title
-                                + " "
-                                + verb_use
-                                + " "
-                                + values[0]
-                                + ". "
-                            )
-
-                label = row["label"]
-                obj = {
-                    "index": index,
-                    "table_id": row["table_id"],
-                    "annotator_id": row["annotator_id"],
-                    "premise": para,
-                    "hypothesis": row["hypothesis"],
-                    "label": label,
-                }
                 result.append(obj)
             dataset_dict[split] = result
-        print(dataset_dict.keys())
         return dataset_dict
 
 
@@ -214,35 +92,7 @@ class InfoTabPreprocess(Step):
             for pt_dict in data:
 
                 samples_processed += 1
-                # Encode data. The premise and hypothesis are encoded as two different segments. The
-                # maximum length is chosen as 504, i.e, 500 sub-word tokens and 4 special characters
-                # If there are more than 504 sub-word tokens, sub-word tokens will be dropped from
-                # the end of the longest sequence in the two (most likely the premise)
-                if single_sentence:
-                    encoded_inps = tokenizer(
-                        pt_dict["hypothesis"],
-                        padding="max_length",
-                        truncation=True,
-                        max_length=504,
-                        return_tensors="pt",
-                    )
-                else:
-                    encoded_inps = tokenizer(
-                        pt_dict["premise"],
-                        pt_dict["hypothesis"],
-                        padding="max_length",
-                        truncation=True,
-                        max_length=504,
-                        return_tensors="pt",
-                    )
-
-                # Some models do not return token_type_ids and hence
-                # we just return a list of zeros for them. This is just
-                # required for completeness.
-                if "token_type_ids" not in encoded_inps.keys():
-                    encoded_inps["token_type_ids"] = torch.zeros_like(
-                        encoded_inps["input_ids"]
-                    )
+                encoded_inps = infotab_tokenize(tokenizer, pt_dict, single_sentence)
 
                 examples.append(
                     {
@@ -253,7 +103,6 @@ class InfoTabPreprocess(Step):
                     }
                 )
 
-            print("Preprocessing Finished")
             dataset_dict[split] = examples
         return DatasetDict(dataset_dict)
 
@@ -297,9 +146,7 @@ class InfoTabInputFromTotto(Step):
         idx = 0
         if task == "verification":
             split2examples = collections.defaultdict(list)
-            print(input_dir)
             for input_file in Path(input_dir).glob("*.jsonl"):
-                print(input_file)
                 with jsonlines.open(input_file, "r") as reader:
                     for obj in list(reader):
                         split2examples[input_file.stem].append(
@@ -330,18 +177,13 @@ class InfoTabInputFromTotto(Step):
                             }
                         )
                     idx += 2
-            print({k: len(v) for k, v in split2examples.items()})
             return split2examples
         else:
             split2examples = collections.defaultdict(list)
-            print(input_dir)
             for input_file in Path(input_dir).glob("*.jsonl"):
-                print(input_file)
                 with jsonlines.open(input_file, "r") as reader:
                     idx = 0
                     for jobj in reader:
-                        print(jobj.keys())
-
                         example = {
                             "table_id": idx,
                             "annotator_id": idx,
@@ -372,5 +214,4 @@ class InfoTabInputFromTotto(Step):
                         split2examples[input_file.stem].append(example)
 
                 logger.info("Num examples", len(split2examples[input_file.stem]))
-            print({k: len(v) for k, v in split2examples.items()})
             return split2examples

@@ -66,8 +66,8 @@ local verification_train = {
 {
     steps: sent_selection_train + verification_train + {
         data_input: {
-            type: "pipeline::input_totto",
-            input_file: "data/totto2/augmented/dev.jsonl",
+            type: "pipeline::input_infotab",
+            input_file: "data/infotab/dev.jsonl",
             size: -1
         },
         document_retrieval: {
@@ -84,6 +84,17 @@ local verification_train = {
             batch_size: 64
 
         },
+        add_sentence: {
+            type: "pipeline::infotab_add_sentence",
+            data: {
+                type: "ref",
+                ref: "data_input"
+            },
+            doc_results: {
+                type: "ref",
+                ref: "document_retrieval"
+            },
+        },
         sentence_selection: {
             type: "pipeline::sentence_selection",
             model: {
@@ -93,7 +104,7 @@ local verification_train = {
             tokenizer: "facebook/bart-large",
             doc_results: {
                 type: "ref",
-                ref: "document_retrieval",
+                ref: "add_sentence",
             },
             data: {
                 type: "ref",

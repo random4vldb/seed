@@ -14,9 +14,21 @@ from transformers import (
     DataCollatorWithPadding,
     Trainer,
     TrainingArguments,
+    pipeline,
 )
-
+import inflect
+from torchmetrics import (
+    Precision,
+    Recall,
+    F1Score,
+    RetrievalPrecision,
+    RetrievalRecall,
+    RetrievalHitRate,
+    RetrievalMRR,
+    Accuracy
+)
 import json
+import torch
 
 
 def tokenize(tokenizer, tokenizer_type, x):
@@ -40,7 +52,7 @@ class SentenceSelection(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "006912"
+    VERSION: Optional[str] = "00672"
 
     def run(self, model, tokenizer, data, doc_results, batch_size):
         tokenizer_type = tokenizer
@@ -54,7 +66,6 @@ class SentenceSelection(Step):
         all_preds = []
 
         collator = DataCollatorWithPadding(tokenizer)
-
 
         training_args = TrainingArguments(
             output_dir="models/sentence_selection",
@@ -83,15 +94,18 @@ class SentenceSelection(Step):
         assert max(ids) == len(data) - 1
         for i in range(0, len(tables), 10000):
             with training_args.main_process_first(desc="dataset map pre-processing"):
-                dataset = Dataset.from_dict({"table": tables[i:i + 10000], "sent": sentences[i:i + 10000]})
+                dataset = Dataset.from_dict(
+                    {"table": tables[i : i + 10000], "sent": sentences[i : i + 10000]}
+                )
                 dataset = dataset.map(
                     lambda x: tokenize(tokenizer, tokenizer_type, x),
                     batch_size=batch_size,
                     remove_columns=["table", "sent"],
                 )
 
-
-            outputs = trainer.predict(dataset, ignore_keys=['past_key_values', 'encoder_last_hidden_state']).predictions
+            outputs = trainer.predict(
+                dataset, ignore_keys=["past_key_values", "encoder_last_hidden_state"]
+            ).predictions
 
             preds = np.argmax(outputs, axis=1).tolist()
             scores = softmax(outputs, axis=1)[:, 1].tolist()
@@ -192,67 +206,85 @@ class CellCorrection(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "001"
+    VERSION: Optional[str] = "002"
 
     def choose_question(self, table, column):
-        if "date" in column.lower():
-            return "What is the date?"
+        if (
+            "date" in column.lower()
+            or "year" in column.lower()
+            or "month" in column.lower()
+        ):
+            return "When ?"
         if "time" in column.lower():
             return "What time ?"
         try:
             datetime.strptime(table[column][0])
-            return "What is the date?"
+            return "When ?"
         except:
             pass
 
-        return "What is the value of " + column + "?"
+        return "What " + column + "?"
 
-    def run(self, model, tokenizer, data, verified_results, batch_size=8):
-        tokenizer_type = tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+    def compare(self, value1, value2):
+        ordinals = [
+            "first",
+            "second",
+            "third",
+            "fourth",
+            "fifth",
+            "sixth",
+            "seventh",
+            "eighth",
+            "ninth",
+            "tenth",
+        ]
 
-        tables = []
-        sentences = []
-        for i, (example, result) in enumerate(zip(data, verified_results)):
-            for sent in result:
-                if "tapas" in tokenizer_type or "tapex" in tokenizer_type:
-                    tables.append(pd.DataFrame(example["table"]))
-                else:
-                    tables.append(example["linearized_table"])
+        for ordinal in ordinals:
+            if ordinal in value1:
+                value1 = value1.replace(ordinal, str(ordinals.index(ordinal) + 1))
+            if ordinal in value2:
+                value2 = value2.replace(ordinal, str(ordinals.index(ordinal) + 1))
 
-                sentences.append(sent)
+        if jaro.jaro_winkler_metric(value1, value2) > 0.8:
+            return True
 
-        dataset = Dataset.from_dict({"table": tables, "sent": sentences})
-        dataset = dataset.map(
-            lambda x: tokenize(tokenizer, x),
-            batch_size=1000,
-            num_proc=4,
-            remove_columns=["table", "sent"],
-        )
-        dataset.set_format(type="torch")
+    def run(self, data, verified_results, batch_size=8):
+        model_name = "deepset/roberta-base-squad2"
+
+        # a) Get predictions
+        nlp = pipeline("question-answering", model=model_name, tokenizer=model_name)
 
         results = []
         for i, (example, result) in enumerate(zip(data, verified_results)):
-            table = pd.DataFrame(example["table"])
+            table = pd.DataFrame(example["table"]).astype(str)
             cells = zip(*example["highlighted_cells"])
             cells = [list(x) for x in cells]
-            sub_table = table.iloc[cells[0], cells[1]].reset_index().astype(str)
+            sub_table = (
+                table.iloc[cells[0], cells[1]]
+                .drop_duplicates()
+                .reset_index()
+                .astype(str)
+            )
+            sub_table = sub_table.iloc[:, ~sub_table.columns.duplicated()]
+
             verified_result, sents = result
             if verified_result == 1:
+                results.append(None)
                 continue
             for column in sub_table.columns:
+                if column == "index":
+                    continue
                 for sent in sents:
                     question = self.choose_question(sub_table, column)
-                    input_string = question + "\\n" + sent
-                    answer = self.run_model(
-                        model,
-                        tokenizer,
-                        input_string,
-                        temperature=0.9,
-                        num_return_sequences=1,
-                        num_beams=20,
-                    )
-                    if jaro.jaro_winkler_metric(answer, sub_table[column][0]) > 0.8:
+                    # input_string = question + "\\n" + sent[0]
+                    answer = nlp({"question": question, "context": sent[0]})
+
+                    if (
+                        jaro.jaro_winkler_metric(
+                            answer["answer"], sub_table.loc[0, column]
+                        )
+                        > 0.8
+                    ):
                         continue
                     else:
                         results.append(sub_table[column][0])
@@ -267,86 +299,126 @@ class Evaluation(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "00499"
+    VERSION: Optional[str] = "0056"
 
     step2name2metrics = {
         x: {
-            "accuracy": evaluate.load("accuracy"),
-            "f1": evaluate.load("f1"),
-            "precision": evaluate.load("precision"),
-            "recall": evaluate.load("recall"),
+            "accuracy": Accuracy(),
+            "f1": F1Score(),
+            "precision": Precision(),
+            "recall": Recall(),
         }
-        for x in ["sentence_selection", "table_verification"]
+        for x in ["table_verification", "cell_correction"]
     }
 
-    step2name2metrics["document_retrieval"] = {"retrieval": evaluate.load("trec_eval")}
+    step2name2metrics["sentence_selection"] = {
+        "accuracy": RetrievalHitRate(),
+        "recall": RetrievalRecall(),
+        "precision": RetrievalPrecision(),
+        "mrr": RetrievalMRR(),
+    }
+
+    step2name2metrics["document_retrieval"] = {
+        "accuracy": RetrievalHitRate(),
+        "recall": RetrievalRecall(),
+        "precision": RetrievalPrecision(),
+        "mrr": RetrievalMRR(),
+    }
+
+
 
     def jaccard_similarity(self, list1, list2):
         return len(set(list1).intersection(set(list2))) / len(
             set(list1).union(set(list2))
         )
 
+    def process_cell_correction(self, data, correction_results):
+        preds = []
+        labels = []
+        for i, (example, result) in enumerate(zip(data, correction_results)):
+            if example["negatives"] == "":
+                labels.append(None)
+            else:
+                (
+                    replacing_value,
+                    replaced_value,
+                    replaced_row,
+                    valid_column,
+                ) = json.loads(example["negatives"])
+                labels.append(replaced_value)
+
+            preds.append(result)
+        return preds, labels
+
     def process_sentence_selection(self, data, sentence_results):
         preds = []
         labels = []
-        for example, result in zip(data, sentence_results):
+        indices = []
+        for idx, (example, result) in enumerate(zip(data, sentence_results)):
             for sent, pred in result:
-                if (
-                    self.jaccard_similarity(sent.split(), example["sentence"].split())
-                    > 0.8
-                ):
-                    labels.append(1)
-                else:
-                    labels.append(0)
-                preds.append(pred)
-        return preds, labels
+                if pred == 1:
+                    if (
+                        self.jaccard_similarity(sent.split(), example["sentence"].split())
+                        > 0.7
+                    ):
+                        labels.append(1)
+                    else:
+                        labels.append(0)
+                    preds.append(1.0)
+                    indices.append(idx)
+        return preds, labels, indices
 
     def process_document_retrieval(self, data, doc_results):
         preds = []
         labels = []
+        indices = []
         for idx, (example, result) in enumerate(zip(data, doc_results)):
             for rank, (doc, score, title) in enumerate(
                 sorted(result, key=lambda x: x[1], reverse=True)
             ):
-                preds.append(
-                    {
-                        "query": idx,
-                        "q0": "q0",
-                        "docid": title,
-                        "rank": rank,
-                        "score": score,
-                        "system": "system",
-                    }
+                preds.append(1.0)
+                labels.append(
+                    title == example["title"]
                 )
-            labels.append(
-                {"query": idx, "q0": "q0", "docid": example["title"], "rel": 1}
-            )
+                indices.append(idx)
 
-        return [pd.DataFrame(preds).to_dict(orient="list")], [
-            pd.DataFrame(labels).to_dict(orient="list")
-        ]
+
+        return preds, labels, indices
 
     def run(self, data, doc_results, sentence_results, verified_results):
         sentence_results = [x[1] for x in sentence_results]
-        doc_preds, doc_labels = self.process_document_retrieval(data, doc_results)
-        sentence_preds, sentence_labels = self.process_sentence_selection(
+        doc_preds, doc_labels, doc_indices = self.process_document_retrieval(data, doc_results)
+        sentence_preds, sentence_labels, sentence_indices = self.process_sentence_selection(
             data, sentence_results
         )
+        cell_preds, cell_labels = self.process_cell_correction(data, verified_results)
 
         result = collections.defaultdict(dict)
+        step2failed_cases = collections.defaultdict(list)
 
-        for step, preds, labels in zip(
-            ["document_retrieval", "sentence_selection", "table_verification"],
-            [doc_preds, sentence_preds, [x[0] for x in verified_results]],
+        for step, preds, labels, indices in zip(
+            [
+                "document_retrieval",
+                "sentence_selection",
+                "table_verification",
+            ],
+            [doc_preds, sentence_preds, [x[0] for x in verified_results], cell_preds],
             [
                 doc_labels,
                 sentence_labels,
                 [x["label"] for x in data][: len(verified_results)],
+                cell_labels,
             ],
+            [doc_indices, sentence_indices, None, None],
         ):
             for name, metric in self.step2name2metrics[step].items():
-                for metric_name, metric_value in metric.compute(
-                    predictions=preds, references=labels
-                ).items():
-                    result[step][f"{name}_{metric_name}"] = str(metric_value)
-        return result
+                if indices is not None:
+                    print(torch.tensor(preds).shape, torch.tensor(labels).shape, torch.tensor(indices).shape)
+                    result[step][f"{name}"] = metric(torch.tensor(preds).float(), torch.tensor(labels), indexes=torch.tensor(indices))
+                else:
+                    result[step][f"{name}"] = metric(torch.tensor(preds).float(), torch.tensor(labels))
+                for pred, label, example in zip(preds, labels, data):
+                    if pred != label:
+                        step2failed_cases[step].append(example)
+
+        return {"result": result, "failed_cases": step2failed_cases}

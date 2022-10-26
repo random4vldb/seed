@@ -1,9 +1,7 @@
 from tango import Step
-import torch
 from datasets import load_dataset
 import pandas as pd
 import json
-from tango.common.dataset_dict import DatasetDict
 from transformers import AutoTokenizer
 
 
@@ -101,23 +99,14 @@ class TapexInputData(Step):
 
         tokenize = tokenize_sent_selection if task == "sent_selection" else tokenize_verification
 
+
         datasets = datasets.map(
             lambda x: tokenize(x, tokenizer),
             batched=True,
             batch_size=100,
-            remove_columns=[
-                "query",
-                "positive",
-                "negative",
-                "title",
-                "table",
-                "highlighted_cells",
-                "id",
-            ],
+            remove_columns=datasets["train"].column_names,
         )
-        return DatasetDict(
-            {
-                "train": datasets["train"],
-                "dev": datasets["dev"],
-            }
-        )
+
+        datasets.set_format("torch", columns=["input_ids", "attention_mask", "labels"])
+
+        return datasets

@@ -1,5 +1,5 @@
 {
-    trainer(name, data_path) ::  {
+    trainer(name, data_path, lr=1e-5) ::  {
         ["input_data_" + name]: {
             type: "infotab::input_from_totto",
             input_dir: data_path,
@@ -20,18 +20,18 @@
                 type: "ref",
                 ref: "json_to_para_" + name,
             },
-            tokenizer: "roberta-base"
+            tokenizer: "roberta-large"
         },
         ["train_" + name]: {
             type: "torch::train",
             model: {
                 type: "infotab::model",
-                model_name_or_path: "roberta-base",
+                model_name_or_path: "roberta-large",
             },
             training_engine: {
                 optimizer: {
                     type: "torch::AdamW",
-                    lr: 1e-5,
+                    lr: lr,
               },
             },
             train_epochs: 5,
@@ -40,21 +40,24 @@
                 "ref": "preprocess_" + name,
             },
             train_dataloader: {
-                batch_size: 1,
+                batch_size: 8,
                 shuffle: false,
                 collate_fn: {
                     type: "transformers::DataCollatorWithPadding",
                     tokenizer: {
-                        pretrained_model_name_or_path: "roberta-base",  
+                        pretrained_model_name_or_path: "roberta-large",  
                     },
                 },
             },
+            callbacks: [{
+                    type: "train::classification_score_callback"
+            }],
             validation_split: "dev",
             validation_dataloader: {
-                batch_size: 2,
+                batch_size: 8,
                 shuffle: false,
             },
-            device_count: 2,
+            device_count: 1,
             checkpoint_every: 10000,
         },
         ["eval_" + name]: {

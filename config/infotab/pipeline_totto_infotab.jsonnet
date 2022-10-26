@@ -1,7 +1,7 @@
 local lib = import 'infotab_train.libsonnet';
 
 local sent_selection_train = lib.trainer("sent_selection", "temp/seed/sent_selection/data/");
-local verification_train = lib.trainer("verification", "data/totto2/triplets/");
+local verification_train = lib.trainer("verification", "data/totto2/triplets/", 1e-6);
 
 {
     steps: sent_selection_train + verification_train + {
@@ -25,12 +25,12 @@ local verification_train = lib.trainer("verification", "data/totto2/triplets/");
 
         },
         sentence_selection: {
-            type: "pipeline::sentence_selection",
+            type: "infotab::sentence_selection",
             model: {
                 type: "ref",
                 ref: "train_sent_selection"
             },
-            tokenizer: "google/tapas-base",
+            tokenizer: "roberta-large",
             doc_results: {
                 type: "ref",
                 ref: "document_retrieval",
@@ -39,15 +39,14 @@ local verification_train = lib.trainer("verification", "data/totto2/triplets/");
                 type: "ref",
                 ref: "data_input"
             },
-            batch_size: 12
         },
         table_verification: {
-            type: "pipeline::table_verification",
+            type: "infotab::table_verification",
             model: {
                 type: "ref",
                 ref: "train_verification"
             },
-            tokenizer: "google/tapas-base",
+            tokenizer: "roberta-large",
             sentence_results: {
                 type: "ref",
                 ref: "sentence_selection",
