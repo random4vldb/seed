@@ -298,7 +298,7 @@ class Evaluation(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "007"
+    VERSION: Optional[str] = "008"
 
     step2name2metrics = {
         x: {
@@ -372,22 +372,19 @@ class Evaluation(Step):
         labels = []
         indices = []
         for idx, (example, result) in enumerate(zip(data, doc_results)):
-            if align_title:
-                example_title = example["title"][: example["title"].find("(") - 1]
-            else:
-                example_title = example["title"]
-
+            titles = set()
             for rank, (doc, score, title) in enumerate(
                 sorted(result, key=lambda x: x[1], reverse=True)
             ):
+                titles.add(title)
 
-                if title == example_title:
+            for title in titles:
+                if title == example["title"]:
                     labels.append(1)
-                    break
-            else:
-                labels.append(0)
-            preds.append(1.0)
-            indices.append(idx)
+                else:
+                    labels.append(0)
+                preds.append(1.0)
+                indices.append(idx)
 
         return preds, labels, indices
 
@@ -431,6 +428,5 @@ class Evaluation(Step):
                             step2failed_cases[step].append((data[index], errors[index]))
                 else:
                     result[step][f"{name}"] = metric(torch.tensor(preds).float(), torch.tensor(labels))
-
 
         return {"result": result, "failed_cases": step2failed_cases}
