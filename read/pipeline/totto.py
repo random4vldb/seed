@@ -25,7 +25,7 @@ class TottoInputData(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "0011"
+    VERSION: Optional[str] = "007"
 
     def run(self, input_file, size=-1):
         with jsonlines.open(input_file) as reader:

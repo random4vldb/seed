@@ -50,7 +50,7 @@ class SentenceSelection(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "00672"
+    VERSION: Optional[str] = "007"
 
     def run(self, model, tokenizer, data, doc_results, batch_size):
         tokenizer_type = tokenizer
@@ -87,9 +87,7 @@ class SentenceSelection(Step):
                 else:
                     tables.append(example["linearized_table"])
                 sentences.append(sent)
-                print(sent)
                 ids.append(idx)
-            print("----------------------------------------------------------------------")
 
 
         assert max(ids) == len(data) - 1
@@ -132,7 +130,7 @@ class TableVerification(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "0061"
+    VERSION: Optional[str] = "007"
 
     def run(self, model, tokenizer, data, sentence_results, batch_size=8):
         tokenizer_type = tokenizer
@@ -207,7 +205,7 @@ class CellCorrection(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "002"
+    VERSION: Optional[str] = "007"
 
     def choose_question(self, table, column):
         if (
@@ -300,7 +298,7 @@ class Evaluation(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "00585"
+    VERSION: Optional[str] = "007"
 
     step2name2metrics = {
         x: {

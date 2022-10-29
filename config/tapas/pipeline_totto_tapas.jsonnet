@@ -116,8 +116,8 @@ local verification_train = {
 {
     steps: sent_selection_train + verification_train + {
         data_input: {
-            type: "pipeline::input_infotab",
-            input_file: "data/infotab/dev.jsonl",
+            type: "pipeline::input_totto",
+            input_file: "data/totto2/augmented/dev.jsonl",
             size: -1
         },
         table_linearization: {

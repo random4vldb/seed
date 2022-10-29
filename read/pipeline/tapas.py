@@ -8,7 +8,7 @@ class TableLinearization(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "0022"
+    VERSION: Optional[str] = "007"
 
     def run(self, data):
         for item in data:
