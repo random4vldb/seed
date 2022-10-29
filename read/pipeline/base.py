@@ -2,7 +2,6 @@ import collections
 import datetime
 from typing import Optional
 
-import evaluate
 import jaro
 import numpy as np
 import pandas as pd
@@ -16,7 +15,6 @@ from transformers import (
     TrainingArguments,
     pipeline,
 )
-import inflect
 from torchmetrics import (
     Precision,
     Recall,
@@ -89,7 +87,10 @@ class SentenceSelection(Step):
                 else:
                     tables.append(example["linearized_table"])
                 sentences.append(sent)
+                print(sent)
                 ids.append(idx)
+            print("----------------------------------------------------------------------")
+
 
         assert max(ids) == len(data) - 1
         for i in range(0, len(tables), 10000):
@@ -299,7 +300,7 @@ class Evaluation(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "0056"
+    VERSION: Optional[str] = "00585"
 
     step2name2metrics = {
         x: {
@@ -336,7 +337,7 @@ class Evaluation(Step):
         preds = []
         labels = []
         for i, (example, result) in enumerate(zip(data, correction_results)):
-            if example["negatives"] == "":
+            if "negatives" not in example or example["negatives"] == "":
                 labels.append(None)
             else:
                 (
@@ -368,26 +369,33 @@ class Evaluation(Step):
                     indices.append(idx)
         return preds, labels, indices
 
-    def process_document_retrieval(self, data, doc_results):
+    def process_document_retrieval(self, data, doc_results, align_title=False):
         preds = []
         labels = []
         indices = []
         for idx, (example, result) in enumerate(zip(data, doc_results)):
+            if align_title:
+                example_title = example["title"][: example["title"].find("(") - 1]
+            else:
+                example_title = example["title"]
+
             for rank, (doc, score, title) in enumerate(
                 sorted(result, key=lambda x: x[1], reverse=True)
             ):
-                preds.append(1.0)
-                labels.append(
-                    title == example["title"]
-                )
-                indices.append(idx)
 
+                if title == example_title:
+                    labels.append(1)
+                    break
+            else:
+                labels.append(0)
+            preds.append(1.0)
+            indices.append(idx)
 
         return preds, labels, indices
 
-    def run(self, data, doc_results, sentence_results, verified_results):
+    def run(self, data, doc_results, sentence_results, verified_results, align_title=False):
         sentence_results = [x[1] for x in sentence_results]
-        doc_preds, doc_labels, doc_indices = self.process_document_retrieval(data, doc_results)
+        doc_preds, doc_labels, doc_indices = self.process_document_retrieval(data, doc_results, align_title=align_title)
         sentence_preds, sentence_labels, sentence_indices = self.process_sentence_selection(
             data, sentence_results
         )
@@ -396,7 +404,12 @@ class Evaluation(Step):
         result = collections.defaultdict(dict)
         step2failed_cases = collections.defaultdict(list)
 
-        for step, preds, labels, indices in zip(
+        labels = [x["label"] for x in data]
+
+        if max(labels) == 2:
+            labels = [1 if x == 2 else x for x in labels]
+
+        for step, preds, labels, indices, errors in zip(
             [
                 "document_retrieval",
                 "sentence_selection",
@@ -406,19 +419,20 @@ class Evaluation(Step):
             [
                 doc_labels,
                 sentence_labels,
-                [x["label"] for x in data][: len(verified_results)],
+                labels,
                 cell_labels,
             ],
             [doc_indices, sentence_indices, None, None],
+            [doc_results, sentence_results, verified_results, None],
         ):
             for name, metric in self.step2name2metrics[step].items():
                 if indices is not None:
-                    print(torch.tensor(preds).shape, torch.tensor(labels).shape, torch.tensor(indices).shape)
                     result[step][f"{name}"] = metric(torch.tensor(preds).float(), torch.tensor(labels), indexes=torch.tensor(indices))
+                    for pred, label, index in zip(preds, labels, indices):
+                        if pred != label:
+                            step2failed_cases[step].append((data[index], errors[index]))
                 else:
                     result[step][f"{name}"] = metric(torch.tensor(preds).float(), torch.tensor(labels))
-                for pred, label, example in zip(preds, labels, data):
-                    if pred != label:
-                        step2failed_cases[step].append(example)
+
 
         return {"result": result, "failed_cases": step2failed_cases}

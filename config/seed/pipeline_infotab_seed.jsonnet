@@ -68,7 +68,7 @@ local verification_train = {
         data_input: {
             type: "pipeline::input_infotab",
             input_file: "data/infotab/dev.jsonl",
-            size: -1
+            size: 100
         },
         document_retrieval: {
             type: "pipeline::document_retrieval",

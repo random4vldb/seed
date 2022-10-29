@@ -34,6 +34,7 @@ class InfotabInputData(Step):
             data[i]["linearized_table"] = infotab2totto(data[i])
             data[i]["table"] = json.loads(data[i]["table"])
             data[i]["highlighted_cells"] = [[0, i] for i in range(len(data[i]["table"][0]))]
+            data[i]["label"] = data[i]["label"] == 2
         return data
 
 
@@ -42,12 +43,15 @@ class InfotabAddSentence(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "001"
+    VERSION: Optional[str] = "0021"
 
 
     def run(self, data, doc_results):
         for idx, (example, doc_result) in enumerate(zip(data, doc_results)):
-            doc_result.append((example["sentence"], 0, example["title"]))
+            for i, (doc, score, title) in enumerate(doc_result):
+                if title == example["title"]:
+                    doc_result.append((example["sentence"], 0, example["title"]))
+                    break
         return doc_results
 
 @Step.register("infotab::sentence_selection")
