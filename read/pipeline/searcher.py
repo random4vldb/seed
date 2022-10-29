@@ -238,7 +238,7 @@ class DocumentRetrieval(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "004"
+    VERSION: Optional[str] = "0041"
 
     @staticmethod
     def init_searcher(searcher, faiss_index, lucene_index, qry_encoder, ctx_encoder):

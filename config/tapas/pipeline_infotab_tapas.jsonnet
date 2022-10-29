@@ -116,9 +116,9 @@ local verification_train = {
 {
     steps: sent_selection_train + verification_train + {
         data_input: {
-            type: "pipeline::input_infotab",
+            type: "pipeline::input_totto",
             input_file: "data/infotab/dev.jsonl",
-            size: -1
+            size: 100
         },
         table_linearization: {
             type: "tapas::table_linearization",
@@ -141,17 +141,6 @@ local verification_train = {
             batch_size: 16
 
         },
-        add_sentence: {
-            type: "pipeline::infotab_add_sentence",
-            data: {
-                type: "ref",
-                ref: "data_input"
-            },
-            doc_results: {
-                type: "ref",
-                ref: "document_retrieval"
-            },
-        },
         sentence_selection: {
             type: "pipeline::sentence_selection",
             model: {
@@ -161,7 +150,7 @@ local verification_train = {
             tokenizer: "google/tapas-base",
             doc_results: {
                 type: "ref",
-                ref: "add_sentence",
+                ref: "document_retrieval",
             },
             data: {
                 type: "ref",
