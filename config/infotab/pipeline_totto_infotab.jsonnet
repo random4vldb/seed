@@ -74,7 +74,6 @@ local verification_train = lib.trainer("verification", "data/totto2/triplets/", 
                 type: "ref",
                 ref: "document_retrieval",
             },
-            align_title: True
         },
     },
 }

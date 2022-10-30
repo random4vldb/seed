@@ -178,7 +178,7 @@ class TableVerification(Step):
             data_collator=collator,
         )
 
-        outputs = trainer.predict(dataset).predictions
+        outputs = trainer.predict(dataset, ignore_keys=["past_key_values", "encoder_last_hidden_state"]).predictions
 
         all_preds = np.argmax(outputs, axis=1).tolist()
         scores = softmax(outputs, axis=1)[:, 1].tolist()
@@ -323,8 +323,6 @@ class Evaluation(Step):
         "precision": RetrievalPrecision(),
         "mrr": RetrievalMRR(),
     }
-
-
 
     def jaccard_similarity(self, list1, list2):
         return len(set(list1).intersection(set(list2))) / len(
