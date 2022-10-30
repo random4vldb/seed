@@ -45,13 +45,14 @@ class InfotabAddSentence(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "008"
+    VERSION: Optional[str] = "0071"
 
 
     def run(self, data, doc_results):
         for idx, (example, doc_result) in enumerate(zip(data, doc_results)):
             for i, (doc, score, title) in enumerate(doc_result):
                 if title in example["title"] or example["title"] in title:
+                    print(title, example["title"], title in example["title"], example["title"] in title)
                     doc_result.append((example["sentence"], 0, example["title"]))
                     break
         return doc_results
