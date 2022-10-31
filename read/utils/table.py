@@ -79,7 +79,8 @@ def infotab2totto(example):
 
     for idx, row in table.iterrows():
         for col in table.columns:
-            item_str = "<cell> " + " ".join(row[col]) + " "
+            s  = " ".join(row[col]) if isinstance(row[col], list) else row[col]
+            item_str = "<cell> " + s + " "
 
             item_str += "<col_header> " + col + " </col_header> "
         

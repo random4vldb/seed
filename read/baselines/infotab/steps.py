@@ -13,7 +13,6 @@ from .helpers import *
 from pathlib import Path
 from typing import Optional
 from tango.common.dataset_dict import DatasetDict
-import torch
 
 root = pyrootutils.setup_root(
     search_from=__file__,
@@ -31,7 +30,7 @@ class InfoTabJsonToPara(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = True
     FORMAT = JsonFormat()
-    VERSION: Optional[str] = "005452"
+    VERSION: Optional[str] = "007"
 
     def run(self, dataset_dict, rand_perm):
         for split, data in dataset_dict.items():
@@ -78,7 +77,7 @@ class InfoTabJsonToPara(Step):
 class InfoTabPreprocess(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = True
-    VERSION: Optional[str] = "0051"
+    VERSION: Optional[str] = "007"
 
     def run(self, dataset_dict, tokenizer, single_sentence):
         tokenizer = AutoTokenizer.from_pretrained(tokenizer)
@@ -111,7 +110,7 @@ class InfoTabPreprocess(Step):
 class InfoTabInputData(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = True
-    VERSION: Optional[str] = "0051"
+    VERSION: Optional[str] = "007"
 
     def run(self, input_dir):
         split2examples = []
@@ -140,7 +139,7 @@ class InfoTabInputData(Step):
 class InfoTabInputFromTotto(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = False
-    VERSION = "00791"
+    VERSION = "008"
 
     def run(self, input_dir, task):
         idx = 0
@@ -177,6 +176,7 @@ class InfoTabInputFromTotto(Step):
                             }
                         )
                     idx += 2
+                random.shuffle(split2examples[input_file.stem])
             return split2examples
         else:
             split2examples = collections.defaultdict(list)
@@ -212,71 +212,71 @@ class InfoTabInputFromTotto(Step):
                         idx += 1
 
                         split2examples[input_file.stem].append(example)
-
+                random.shuffle(split2examples[input_file.stem])
                 logger.info("Num examples", len(split2examples[input_file.stem]))
             return split2examples
 
 
-    @Step.register("infotab::pipeline_preprocess")
-    class InfotabPipelinePreProcess(Step):
-        DETERMINISTIC: bool = True
-        CACHEABLE: Optional[bool] = True
-        FORMAT: Format = JsonFormat()
+@Step.register("infotab::pipeline_preprocess")
+class InfotabPipelinePreProcess(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = JsonFormat()
 
-        def run(self, data, doc_results):
-            examples = []
-            for idx, (example, doc_result) in enumerate(zip(data, doc_results)):
-                for sentence in doc_result:
-                    examples.append(
-                        {
-                            "table_id": idx,
-                            "annotator_id": idx,
-                            "hypothesis":  sentence,
-                            "table": example["table"],
-                            "title": example["title"],
-                            "highlighted_cells": example["highlighted_cells"],
-                        }
-                    )
+    def run(self, data, doc_results):
+        examples = []
+        for idx, (example, doc_result) in enumerate(zip(data, doc_results)):
+            for sentence in doc_result:
+                examples.append(
+                    {
+                        "table_id": idx,
+                        "annotator_id": idx,
+                        "hypothesis":  sentence,
+                        "table": example["table"],
+                        "title": example["title"],
+                        "highlighted_cells": example["highlighted_cells"],
+                    }
+                )
 
-            return examples
+        return examples
 
-    @Step.register("infotab::pipeline_postprocess")
-    class InfotabPipelinePostProcess(Step):
-        DETERMINISTIC: bool = True
-        CACHEABLE: Optional[bool] = True
-        FORMAT: Format = JsonFormat()
+@Step.register("infotab::pipeline_postprocess")
+class InfotabPipelinePostProcess(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = JsonFormat()
 
-        def run(self, results):
-            id2results = {}
-            for idx, result in enumerate(results):
-                if result["table_id"] in id2results:
-                    if results["label"] == 1:
-                        id2results[result["table_id"]] = True
-                    else:
-                        id2results[result["table_id"]] = False
+    def run(self, results):
+        id2results = {}
+        for idx, result in enumerate(results):
+            if result["table_id"] in id2results:
+                if results["label"] == 1:
+                    id2results[result["table_id"]] = True
                 else:
-                    if results["label"] == 1:
-                        id2results[result["table_id"]] = True
-                    
-            final_results = [False] * len(results)
-            for idx, result in id2results.items():
-                final_results[idx] = id2results[idx]
-            
-            return final_results
-
-
-
-    @Step.register("infotab::document_retrieval")
-    class InfotabSentenceSelection(Step):
-        DETERMINISTIC: bool = True
-        CACHEABLE: Optional[bool] = True
-        FORMAT: Format = JsonFormat()
-
-        def run(self, data, sentence_results):
-            for example, sentence_result in zip(data, sentence_results):
-                for doc, score, title in sentence_result:
-                    if title == example["title"]:
-                        example["doc"] = doc
-                        example["score"] = score
-                        break
+                    id2results[result["table_id"]] = False
+            else:
+                if results["label"] == 1:
+                    id2results[result["table_id"]] = True
+                
+        final_results = [False] * len(results)
+        for idx, result in id2results.items():
+            final_results[idx] = id2results[idx]
         
+        return final_results
+
+
+
+@Step.register("infotab::document_retrieval")
+class InfotabSentenceSelection(Step):
+    DETERMINISTIC: bool = True
+    CACHEABLE: Optional[bool] = True
+    FORMAT: Format = JsonFormat()
+
+    def run(self, data, sentence_results):
+        for example, sentence_result in zip(data, sentence_results):
+            for doc, score, title in sentence_result:
+                if title == example["title"]:
+                    example["doc"] = doc
+                    example["score"] = score
+                    break
+    

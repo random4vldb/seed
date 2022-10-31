@@ -59,7 +59,6 @@ def load_sentences(file, skip_first=True, single_sentence=False):
 
 def infotab_tokenize(tokenizer, pt_dict, single_sentence=False):
     if single_sentence:
-        print("hypothesis", pt_dict["hypothesis"])
         encoded_inps = tokenizer(
             pt_dict["hypothesis"],
             padding="max_length",
@@ -126,12 +125,13 @@ def infotab_linearize(index, row):
             " A ", " AB "
         )  # This is a hack to for inflect to work properly
         try:
-            res = inflect.plural_noun(key)
+            key = inflect.plural_noun(key)
         except:
-            res = None
-        if (len(values) > 1) and res is not None:
+            key = key
+        if (len(values) > 1):
             verb_use = "are"
             if is_date("".join(values)):
+                print("Date")
                 para += title + " was " + str(key) + " on "
                 line += title + " was " + str(key) + " on "
             else:

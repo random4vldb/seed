@@ -34,7 +34,7 @@
                     lr: lr,
               },
             },
-            train_epochs: 5,
+            train_epochs: 10,
             dataset_dict: {
                 "type": "ref",
                 "ref": "preprocess_" + name,

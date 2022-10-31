@@ -28,6 +28,8 @@ def main(cfg):
     logger.info("Loading tables")
     for table_obj in tables:
         table = pd.DataFrame(table_obj["table"]).astype(str).applymap(lambda x: wtp.remove_markup(x))
+        for col in table.columns:
+            table = table.rename(columns={col: wtp.remove_markup(col)})
         key = (
             "|".join(table.columns.values),
             table_obj["page_id"],
@@ -56,17 +58,16 @@ def main(cfg):
                 ground_truth = (table == true_table)
             except ValueError:
                 continue
-            print(ground_truth)       
             rows = np.where(np.any(~ground_truth, axis=1))[0].tolist()
-            print(rows)
+            table["page_title"] = [key[2]] * len(table)
 
             for row in rows:
                 example = {
-                    "table": table.iloc[row, :].to_json(orient="records"),
+                    "table": table.iloc[[row], :].to_json(orient="records"),
                     "label": False,
-                    "true_table": true_table.iloc[row, :].to_json(orient="records"),
+                    "true_table": true_table.iloc[[row], :].to_json(orient="records"),
                     "revision_id": revision_id,
-                    "page_title": key[2],
+                    "title": key[2],
                 }
 
                 data.append(example)
@@ -74,11 +75,11 @@ def main(cfg):
                 if row not in existing_rows:
                     existing_rows.add(row)
                     example = {
-                        "table": true_table.iloc[row, :].to_json(orient="records"),
+                        "table": true_table.iloc[[row], :].to_json(orient="records"),
                         "label": False,
-                        "true_table": true_table.iloc[row, :].to_json(orient="records"),
+                        "true_table": true_table.iloc[[row], :].to_json(orient="records"),
                         "revision_id": revision_id,
-                        "page_title": key[2],
+                        "title": key[2],
                     }
                     data.append(example)
 

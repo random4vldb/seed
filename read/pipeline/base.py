@@ -120,7 +120,7 @@ class SentenceSelection(Step):
             sentence_results[id][1].append((sent, pred))
             sentence_results[id][2] = (
                 data[id]["linearized_table"],
-                data[id]["sentence"],
+                data[id]["sentence"] if "sentence" in data[id] else ""
             )
         return sentence_results
 
@@ -193,7 +193,7 @@ class TableVerification(Step):
                     sent,
                     score,
                     data[id]["linearized_table"],
-                    data[id]["sentence"],
+                    data[id]["sentence"] if "sentence" in data[id] else "",
                     data[id]["label"],
                 )
             )
@@ -354,8 +354,9 @@ class Evaluation(Step):
         for idx, (example, result) in enumerate(zip(data, sentence_results)):
             for sent, pred in result:
                 if pred == 1:
+                    sentence = example["sentence"] if "sentence" in example else ""
                     if (
-                        self.jaccard_similarity(sent.split(), example["sentence"].split())
+                        self.jaccard_similarity(sent.split(), sentence.split())
                         > 0.7
                     ):
                         labels.append(1)

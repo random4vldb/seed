@@ -8,7 +8,7 @@ local verification_train = lib.trainer("verification", "data/totto2/triplets/", 
         data_input: {
             type: "pipeline::input_totto",
             input_file: "data/totto2/augmented/dev.jsonl",
-            size: -1
+            size: 500
         },
         document_retrieval: {
             type: "pipeline::document_retrieval",
@@ -21,8 +21,7 @@ local verification_train = lib.trainer("verification", "data/totto2/triplets/", 
                 type: "ref",
                 ref: "data_input"
             },
-            batch_size: 16
-
+            batch_size: 64
         },
         sentence_selection: {
             type: "infotab::sentence_selection",

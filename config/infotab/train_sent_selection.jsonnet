@@ -57,7 +57,7 @@ local split_steps = std.foldl(
                 collate_fn: {
                     type: "transformers::DataCollatorWithPadding",
                     tokenizer: {
-                        pretrained_model_name_or_path: "google/tapas-base",  
+                        pretrained_model_name_or_path: "roberta-large",  
                     },
                 },
             },

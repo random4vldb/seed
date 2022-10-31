@@ -21,7 +21,7 @@ class InfotabInputData(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "0013"
+    VERSION: Optional[str] = "0015"
 
     def run(self, input_file, size=-1):
         with jsonlines.open(input_file) as reader:
@@ -52,7 +52,6 @@ class InfotabAddSentence(Step):
         for idx, (example, doc_result) in enumerate(zip(data, doc_results)):
             for i, (doc, score, title) in enumerate(doc_result):
                 if title in example["title"] or example["title"] in title:
-                    print(title, example["title"], title in example["title"], example["title"] in title)
                     doc_result.append((example["sentence"], 0, example["title"]))
                     break
         return doc_results
@@ -62,13 +61,13 @@ class InfotabSentenceSelection(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "0027"
+    VERSION: Optional[str] = "00281"
 
     def run(self, model, tokenizer, data, doc_results, batch_size=4):
         tokenizer = AutoTokenizer.from_pretrained(tokenizer)
         infotab_data = []
         sentences = []
-        for idx, (example, sentence_result) in enumerate(list(zip(data, doc_results))[:100]):
+        for idx, (example, sentence_result) in enumerate(list(zip(data, doc_results))):
             for sent, score, title in sentence_result:
                 infotab_data.append(
                     {
@@ -112,7 +111,7 @@ class InfotabSentenceSelection(Step):
             all_preds.extend(outputs["predictions"].detach().cpu().numpy().tolist())
             all_scores.extend(torch.softmax(logits, dim=1)[:, 1].detach().cpu().numpy().tolist())
 
-        assert len(all_preds) == len(all_scores) == len(infotab_data)
+        assert len(all_preds) == len(all_scores) == len(infotab_data) == len(sentences)
         sentence_results = [[[], [], []] for _ in range(len(doc_results))]
         for (pred, sent, score, infotab_example) in zip(all_preds, sentences, all_scores, infotab_data):
             id = infotab_example["table_id"]
@@ -132,7 +131,7 @@ class InfotabVerification(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: Optional[bool] = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "0023"
+    VERSION: Optional[str] = "0025"
 
     def run(self, model, tokenizer, data, sentence_results, batch_size=4):
         infotab_data = []
@@ -140,7 +139,7 @@ class InfotabVerification(Step):
         sentence_results = [x[0] for x in sentence_results]
         sentences = []
 
-        for idx, (example, sentence_result) in enumerate(list(zip(data, sentence_results))[:100]):
+        for idx, (example, sentence_result) in enumerate(list(zip(data, sentence_results))):
             for sent, score in sentence_result:
                 infotab_data.append(
                     {
@@ -184,9 +183,10 @@ class InfotabVerification(Step):
             all_preds.extend(outputs["predictions"].detach().cpu().numpy().tolist())
             all_scores.extend(torch.softmax(logits, dim=1).detach().cpu().numpy().tolist())
 
-        assert len(all_preds) == len(all_scores) == len(infotab_data)
+        assert len(all_preds) == len(all_scores) == len(infotab_data) == len(sentences)
+        print(len(all_preds), len(all_scores), len(infotab_data), len(sentences))
         verified_results = [[False, []] for _ in range(len(sentence_results))]
-        for (pred, sent, score, infotab_example) in zip(all_preds,sentences, all_scores, infotab_data):
+        for (pred, sent, score, infotab_example) in zip(all_preds, sentences, all_scores, infotab_data):
             id = infotab_example["table_id"]
             if pred == 1:
                 verified_results[id][0] = True
