@@ -205,15 +205,18 @@ class CellCorrection(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "007"
+    VERSION: Optional[str] = "0078"
 
     def choose_question(self, table, column):
         if (
             "date" in column.lower()
             or "year" in column.lower()
             or "month" in column.lower()
+            or "start" in column.lower()
+            or "end" in column.lower()
+            or "day" in column.lower()
         ):
-            return "When ?"
+            return "When is ?"
         if "time" in column.lower():
             return "What time ?"
         try:
@@ -222,7 +225,7 @@ class CellCorrection(Step):
         except:
             pass
 
-        return "What " + column + "?"
+        return "What is the " + column + "?"
 
     def compare(self, value1, value2):
         ordinals = [
@@ -247,7 +250,7 @@ class CellCorrection(Step):
         if jaro.jaro_winkler_metric(value1, value2) > 0.8:
             return True
 
-    def run(self, data, verified_results, batch_size=8):
+    def run(self, data, verified_results):
         model_name = "deepset/roberta-base-squad2"
 
         # a) Get predictions
@@ -268,8 +271,9 @@ class CellCorrection(Step):
 
             verified_result, sents = result
             if verified_result == 1:
-                results.append(None)
+                results.append([])
                 continue
+            res = []
             for column in sub_table.columns:
                 if column == "index":
                     continue
@@ -277,6 +281,9 @@ class CellCorrection(Step):
                     question = self.choose_question(sub_table, column)
                     # input_string = question + "\\n" + sent[0]
                     answer = nlp({"question": question, "context": sent[0]})
+                    print(question, sent[0], answer, sub_table)
+                    if answer["score"] < 0.2:
+                        continue
 
                     if (
                         jaro.jaro_winkler_metric(
@@ -286,10 +293,9 @@ class CellCorrection(Step):
                     ):
                         continue
                     else:
-                        results.append(sub_table[column][0])
+                        res.append((sub_table[column][0], answer["score"]))
                         break
-                else:
-                    results.append(None)
+            results.append(res)
         return results
 
 
@@ -298,30 +304,24 @@ class Evaluation(Step):
     DETERMINISTIC: bool = True
     CACHEABLE: bool = True
     FORMAT: Format = JsonFormat()
-    VERSION: Optional[str] = "008"
+    VERSION: Optional[str] = "00846"
 
     step2name2metrics = {
         x: {
-            "accuracy": Accuracy(),
-            "f1": F1Score(),
-            "precision": Precision(),
-            "recall": Recall(),
+        "accuracy": RetrievalHitRate(),
+        "recall": RetrievalRecall(),
+        "precision": RetrievalPrecision(),
+        "mrr": RetrievalMRR(),
         }
-        for x in ["table_verification", "cell_correction"]
+        for x in ["sentence_selection", "cell_correction", "document_retrieval"]
     }
 
-    step2name2metrics["sentence_selection"] = {
-        "accuracy": RetrievalHitRate(),
-        "recall": RetrievalRecall(),
-        "precision": RetrievalPrecision(),
-        "mrr": RetrievalMRR(),
-    }
 
-    step2name2metrics["document_retrieval"] = {
-        "accuracy": RetrievalHitRate(),
-        "recall": RetrievalRecall(),
-        "precision": RetrievalPrecision(),
-        "mrr": RetrievalMRR(),
+    step2name2metrics["table_verification"] = {
+        "accuracy": Accuracy(),
+        "f1": F1Score(),
+        "precision": Precision(),
+        "recall": Recall(),
     }
 
     def jaccard_similarity(self, list1, list2):
@@ -332,20 +332,26 @@ class Evaluation(Step):
     def process_cell_correction(self, data, correction_results):
         preds = []
         labels = []
+        indices = []
         for i, (example, result) in enumerate(zip(data, correction_results)):
-            if "negatives" not in example or example["negatives"] == "":
-                labels.append(None)
-            else:
-                (
-                    replacing_value,
-                    replaced_value,
-                    replaced_row,
-                    valid_column,
-                ) = json.loads(example["negatives"])
-                labels.append(replaced_value)
+            if not example["negatives"]:
+                continue
+            (
+                replacing_value,
+                replaced_value,
+                replaced_row,
+                valid_column,
+            ) = json.loads(example["negatives"])
+            for res, score in result:
+                print(replaced_value, res, self.jaccard_similarity(replaced_value, res), score)
+                if self.jaccard_similarity(replaced_value, res) > 0.7:
+                    labels.append(1)
+                else:
+                    labels.append(0)
 
-            preds.append(result)
-        return preds, labels
+                preds.append(1)
+                indices.append(i)
+        return preds, labels, indices
 
     def process_sentence_selection(self, data, sentence_results):
         preds = []
@@ -366,7 +372,7 @@ class Evaluation(Step):
                     indices.append(idx)
         return preds, labels, indices
 
-    def process_document_retrieval(self, data, doc_results, align_title=False):
+    def process_document_retrieval(self, data, doc_results):
         preds = []
         labels = []
         indices = []
@@ -387,13 +393,13 @@ class Evaluation(Step):
 
         return preds, labels, indices
 
-    def run(self, data, doc_results, sentence_results, verified_results, align_title=False):
+    def run(self, data, doc_results, sentence_results, verified_results, correction_results):
         sentence_results = [x[1] for x in sentence_results]
-        doc_preds, doc_labels, doc_indices = self.process_document_retrieval(data, doc_results, align_title=align_title)
+        doc_preds, doc_labels, doc_indices = self.process_document_retrieval(data, doc_results)
         sentence_preds, sentence_labels, sentence_indices = self.process_sentence_selection(
             data, sentence_results
         )
-        cell_preds, cell_labels = self.process_cell_correction(data, verified_results)
+        cell_preds, cell_labels, cell_indices = self.process_cell_correction(data, correction_results)
 
         result = collections.defaultdict(dict)
         step2failed_cases = collections.defaultdict(list)
@@ -408,6 +414,7 @@ class Evaluation(Step):
                 "document_retrieval",
                 "sentence_selection",
                 "table_verification",
+                "cell_correction"
             ],
             [doc_preds, sentence_preds, [x[0] for x in verified_results], cell_preds],
             [
@@ -416,11 +423,12 @@ class Evaluation(Step):
                 labels,
                 cell_labels,
             ],
-            [doc_indices, sentence_indices, None, None],
-            [doc_results, sentence_results, verified_results, None],
+            [doc_indices, sentence_indices, None, cell_indices],
+            [doc_results, sentence_results, verified_results, correction_results],
         ):
             for name, metric in self.step2name2metrics[step].items():
                 if indices is not None:
+                    print(step, name)
                     result[step][f"{name}"] = metric(torch.tensor(preds).float(), torch.tensor(labels), indexes=torch.tensor(indices))
                     for pred, label, index in zip(preds, labels, indices):
                         if pred != label:

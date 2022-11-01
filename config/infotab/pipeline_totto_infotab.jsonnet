@@ -1,7 +1,7 @@
 local lib = import 'infotab_train.libsonnet';
 
 local sent_selection_train = lib.trainer("sent_selection", "temp/seed/sent_selection/data/");
-local verification_train = lib.trainer("verification", "data/totto2/triplets/", 1e-6);
+local verification_train = lib.trainer("verification", "data/totto2/triplets/");
 
 {
     steps: sent_selection_train + verification_train + {

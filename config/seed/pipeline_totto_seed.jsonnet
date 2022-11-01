@@ -147,6 +147,10 @@ local verification_train = {
                 type: "ref",
                 ref: "document_retrieval",
             },
+            correction_results: {
+                type: "ref",
+                ref: "cell_correction",
+            },
         },
     },
 }

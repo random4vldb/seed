@@ -139,7 +139,7 @@ class InfoTabInputData(Step):
 class InfoTabInputFromTotto(Step):
     DETERMINISTIC: bool = True
     CACHEABLE = False
-    VERSION = "008"
+    VERSION = "009"
 
     def run(self, input_dir, task):
         idx = 0
@@ -176,14 +176,13 @@ class InfoTabInputFromTotto(Step):
                             }
                         )
                     idx += 2
-                random.shuffle(split2examples[input_file.stem])
             return split2examples
         else:
             split2examples = collections.defaultdict(list)
             for input_file in Path(input_dir).glob("*.jsonl"):
                 with jsonlines.open(input_file, "r") as reader:
                     idx = 0
-                    for jobj in reader:
+                    for jobj in list(reader):
                         example = {
                             "table_id": idx,
                             "annotator_id": idx,
@@ -212,7 +211,6 @@ class InfoTabInputFromTotto(Step):
                         idx += 1
 
                         split2examples[input_file.stem].append(example)
-                random.shuffle(split2examples[input_file.stem])
                 logger.info("Num examples", len(split2examples[input_file.stem]))
             return split2examples
 

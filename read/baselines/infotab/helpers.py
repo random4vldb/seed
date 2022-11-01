@@ -131,7 +131,6 @@ def infotab_linearize(index, row):
         if (len(values) > 1):
             verb_use = "are"
             if is_date("".join(values)):
-                print("Date")
                 para += title + " was " + str(key) + " on "
                 line += title + " was " + str(key) + " on "
             else:
